@@ -2,10 +2,9 @@
 # accelerate launch --config_file=/raid/hpc/hekai/WorkShop/My_project/PathLLM_new/accelerate_configs/deepspeed_zero2.yaml  run.py 
 
 import os
-os.environ["WANDB_MODE"] = "offline"
+# os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "5"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5,7"
 
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
@@ -27,7 +26,7 @@ class ScriptArguments:
     clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base "})
     
     # data
-    select_data_num: Optional[int] = field(default=1000, metadata={"help": "the number of training data"})
+    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
     dataset_name: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": " CNX-PathLLM/TextbookPath / CNX-PathLLM/PVQAClean /  stingning/ultrachat "})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     
@@ -41,8 +40,8 @@ class ScriptArguments:
     
     # training hypterparam
     learning_rate: Optional[float] = field(default=2.0e-5, metadata={"help": "the learning rate"})
-    train_batch_size: Optional[int] = field(default=16, metadata={"help": "the batch size"})
-    eval_batch_size: Optional[int] = field(default=64, metadata={"help": "the batch size"})
+    train_batch_size: Optional[int] = field(default=64, metadata={"help": "the batch size"})
+    eval_batch_size: Optional[int] = field(default=256, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
     num_train_epochs: Optional[int] = field(default=2, metadata={"help": "the number of training epochs"})
@@ -52,7 +51,7 @@ class ScriptArguments:
     eval_steps: Optional[int] = field(default=2, metadata={"help": "eval_steps"})
     
     # system config
-    load_in_8bit: Optional[bool] = field(default=True, metadata={"help": "load the model in 8 bits precision"})
+    load_in_8bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 8 bits precision"})
     load_in_4bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 4 bits precision"})
     trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
     token: Optional[bool] = field(default="True", metadata={"help": "Use HF auth token to access the model"})

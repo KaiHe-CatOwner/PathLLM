@@ -12,22 +12,31 @@ class MyCustomModel(nn.Module):
     def __init__(self, script_args, tokenizer):
         nn.Module.__init__(self)
         self.script_args = script_args
+
+        self.vision_encoder, self.image_processor = self.load_vision_encoder(script_args)
+
         self.llm_tokenizer = tokenizer
-        self.load_vision_encoder(script_args)
-        self.load_llm(script_args)
+        self.llm = self.load_llm(script_args)
+        self.embedding_layer = self.llm.get_input_embeddings()
+
         self.fusion_layer = nn.Linear(self.vision_encoder.embed_dim, self.llm.config.hidden_size)
         self.config = self.llm.config
+        
+        self.vision_encoder.requires_grad = False
+        self.llm.requires_grad = False
+
 
     def load_vision_encoder(self, script_args):
         print("vision_encoder loading ...")
 
         clip_name = clip_path_map(script_args.clip_name)
         if script_args.clip_name=="pathclip-base":
-            self.vision_encoder, _, self.image_processor = open_clip.create_model_and_transforms('ViT-B-16', pretrained=clip_name, force_quick_gelu=True)
+            vision_encoder, _, image_processor = open_clip.create_model_and_transforms('ViT-B-16', pretrained=clip_name, force_quick_gelu=True)
         elif script_args.clip_name=="conch": 
             from conch.open_clip_custom import create_model_from_pretrained
-            self.vision_encoder, self.image_processor = create_model_from_pretrained('conch_ViT-B-16', clip_name)
-        self.vision_encoder.visual.output_tokens = True
+            vision_encoder, image_processor = create_model_from_pretrained('conch_ViT-B-16', clip_name)
+        vision_encoder.visual.output_tokens = True
+        return vision_encoder, image_processor
     
     def load_llm(self, script_args):
         print("llm loading ...")
@@ -45,7 +54,7 @@ class MyCustomModel(nn.Module):
             quantization_config = None
             torch_dtype = None
 
-        self.llm = AutoModelForCausalLM.from_pretrained(
+        llm = AutoModelForCausalLM.from_pretrained(
                     script_args.llm_name,
                     quantization_config=quantization_config,
                     device_map=device_map,
@@ -53,7 +62,8 @@ class MyCustomModel(nn.Module):
                     torch_dtype=torch_dtype,
                     token=script_args.token,
                 )
-        self.embedding_layer = self.llm.get_input_embeddings()
+        
+        return llm
     
     def forward(self, *args, **kwargs):
         input_ids = kwargs["input_ids"]

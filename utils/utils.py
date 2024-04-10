@@ -1,4 +1,18 @@
 import numpy as np
+import os
+import random
+import torch
+
+def seed_everything(seed=42):
+    random.seed(seed)             # Python的内置随机库
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)          # Numpy库
+    if torch is not None:         # PyTorch
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)          # 如果使用GPU
+        torch.cuda.manual_seed_all(seed)      # 如果使用多GPU
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 def clip_path_map(path):
     if path=="pathclip-base":
@@ -14,7 +28,7 @@ def my_compute_metrics(p):
     
     mask = labels != -1
     correct = (labels == predictions) & mask
-    accuracy = np.mean(correct)
+    accuracy =  round(np.mean(correct) *100, 2)
 
     return {
         'accuracy': accuracy,

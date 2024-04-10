@@ -1,20 +1,18 @@
-
-# accelerate launch --config_file=/raid/hpc/hekai/WorkShop/My_project/PathLLM_new/accelerate_configs/deepspeed_zero2.yaml  run.py 
-
 import os
 # os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "5,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5,6"
 
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
-from utils.utils import my_compute_metrics
+from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
 from model.my_model import MyCustomModel
 from peft import LoraConfig
 from datasets import load_dataset
 from utils.data_collator import MyDataCollatorForLanguageModeling
+
 
 @dataclass
 class ScriptArguments:
@@ -24,9 +22,9 @@ class ScriptArguments:
     # model
     llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name，  meta-llama/Llama-2-7b-chat-hf "})
     clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base "})
-    
+
     # data
-    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
+    select_data_num: Optional[int] = field(default=100, metadata={"help": "the number of training data， -1 mean use all data"})
     dataset_name: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": " CNX-PathLLM/TextbookPath / CNX-PathLLM/PVQAClean /  stingning/ultrachat "})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     
@@ -35,27 +33,30 @@ class ScriptArguments:
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=5, metadata={"help": "the number of logging steps"})
     max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
-    save_steps: Optional[int] = field(default=1000, metadata={"help": "Number of updates steps before two checkpoint saves"})
+    save_steps: Optional[int] = field(default=200, metadata={"help": "Number of updates steps before two checkpoint saves"})
     save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
+    
+    resume_from_checkpoint: Optional[bool] = field(default=True, metadata={"help": "True or  /output/checkpoint-1400"})
     
     # training hypterparam
     learning_rate: Optional[float] = field(default=2.0e-5, metadata={"help": "the learning rate"})
-    train_batch_size: Optional[int] = field(default=64, metadata={"help": "the batch size"})
-    eval_batch_size: Optional[int] = field(default=256, metadata={"help": "the batch size"})
+    train_batch_size: Optional[int] = field(default=40, metadata={"help": "the batch size"})
+    eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
-    num_train_epochs: Optional[int] = field(default=2, metadata={"help": "the number of training epochs"})
+    num_train_epochs: Optional[int] = field(default=500, metadata={"help": "the number of training epochs"})
         
     # eval
     evaluation_strategy: Optional[str] = field(default="steps", metadata={"help": "epoch, step"})
-    eval_steps: Optional[int] = field(default=2, metadata={"help": "eval_steps"})
+    eval_steps: Optional[int] = field(default=100, metadata={"help": "eval_steps"})
     
     # system config
     load_in_8bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 8 bits precision"})
-    load_in_4bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 4 bits precision"})
+    load_in_4bit: Optional[bool] = field(default=True, metadata={"help": "load the model in 4 bits precision"})
     trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
-    token: Optional[bool] = field(default="True", metadata={"help": "Use HF auth token to access the model"})
-    
+    token: Optional[bool] = field(default=True, metadata={"help": "Use HF auth token to access the model"})
+    seed: Optional[int] = field(default=42, metadata={"help": "seed"})
+
     # unused
     push_to_hub: Optional[bool] = field(default=False, metadata={"help": "Push the model to HF Hub"})
     hub_model_id: Optional[str] = field(default="mistral-7b-finetuned-ultrachat", metadata={"help": "The name of the model on HF Hub"})
@@ -65,10 +66,13 @@ class ScriptArguments:
 
 parser = HfArgumentParser(ScriptArguments)
 script_args = parser.parse_args_into_dataclasses()[0]
+seed_everything(script_args.seed)
 
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
+
+
 
 def formatting_func(examples):
     question = examples["question"]
@@ -89,7 +93,13 @@ dataset = dataset.map(formatting_func, num_proc=4, remove_columns=["question", "
 train_dataset = dataset["train"]
 eval_dataset = dataset["test"]
 
-model = MyCustomModel(script_args, tokenizer)
+model = MyCustomModel(script_args.clip_name, 
+                      script_args.load_in_8bit, 
+                      script_args.load_in_4bit, 
+                      script_args.llm_name, 
+                      script_args.trust_remote_code, 
+                      script_args.token, 
+                      tokenizer)
 
 
 training_args = TrainingArguments(
@@ -99,6 +109,7 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=script_args.gradient_accumulation_steps,
     # gradient_checkpointing=True,
     learning_rate=script_args.learning_rate,
+    # lr_scheduler_type="cosine",
     logging_steps=script_args.logging_steps,
     num_train_epochs=script_args.num_train_epochs,
     max_steps=script_args.max_steps,
@@ -106,7 +117,6 @@ training_args = TrainingArguments(
     save_steps=script_args.save_steps,
     save_total_limit=script_args.save_total_limit,
     bf16=True,
-    lr_scheduler_type="cosine",
     warmup_ratio=0.1,
     evaluation_strategy=script_args.evaluation_strategy,
     eval_steps=script_args.eval_steps,
@@ -142,6 +152,7 @@ trainer = CustomTrainer(
 
 
 trainer.train()
+# trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint,)
 # model.save_pretrained("./my_custom_model")
 
 

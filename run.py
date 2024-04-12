@@ -1,8 +1,4 @@
 import os
-# os.environ["WANDB_MODE"] = "offline"
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "5,6"
-
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
 from utils.utils import my_compute_metrics,seed_everything
@@ -19,12 +15,21 @@ class ScriptArguments:
     """
     The name of the Casual LM model we wish to fine with SFTTrainer
     """
+
+    # system config
+    gpu: Optional[str] = field(default="6", metadata={"help": "gpu"})
+    load_in_8bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 8 bits precision"})
+    load_in_4bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 4 bits precision"})
+    trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
+    token: Optional[bool] = field(default=True, metadata={"help": "Use HF auth token to access the model"})
+    seed: Optional[int] = field(default=42, metadata={"help": "seed"})
+
     # model
     llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name，  meta-llama/Llama-2-7b-chat-hf "})
     clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base "})
-
+    
     # data
-    select_data_num: Optional[int] = field(default=100, metadata={"help": "the number of training data， -1 mean use all data"})
+    select_data_num: Optional[int] = field(default=-100, metadata={"help": "the number of training data， -1 mean use all data"})
     dataset_name: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": " CNX-PathLLM/TextbookPath / CNX-PathLLM/PVQAClean /  stingning/ultrachat "})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     
@@ -36,7 +41,8 @@ class ScriptArguments:
     save_steps: Optional[int] = field(default=200, metadata={"help": "Number of updates steps before two checkpoint saves"})
     save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
     
-    resume_from_checkpoint: Optional[bool] = field(default=True, metadata={"help": "True or  /output/checkpoint-1400"})
+    llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
+    resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     
     # training hypterparam
     learning_rate: Optional[float] = field(default=2.0e-5, metadata={"help": "the learning rate"})
@@ -44,18 +50,13 @@ class ScriptArguments:
     eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
-    num_train_epochs: Optional[int] = field(default=500, metadata={"help": "the number of training epochs"})
+    num_train_epochs: Optional[int] = field(default=50, metadata={"help": "the number of training epochs"})
         
     # eval
     evaluation_strategy: Optional[str] = field(default="steps", metadata={"help": "epoch, step"})
-    eval_steps: Optional[int] = field(default=100, metadata={"help": "eval_steps"})
+    eval_steps: Optional[int] = field(default=1, metadata={"help": "eval_steps"})
     
-    # system config
-    load_in_8bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 8 bits precision"})
-    load_in_4bit: Optional[bool] = field(default=True, metadata={"help": "load the model in 4 bits precision"})
-    trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
-    token: Optional[bool] = field(default=True, metadata={"help": "Use HF auth token to access the model"})
-    seed: Optional[int] = field(default=42, metadata={"help": "seed"})
+
 
     # unused
     push_to_hub: Optional[bool] = field(default=False, metadata={"help": "Push the model to HF Hub"})
@@ -68,16 +69,28 @@ parser = HfArgumentParser(ScriptArguments)
 script_args = parser.parse_args_into_dataclasses()[0]
 seed_everything(script_args.seed)
 
+os.environ["WANDB_MODE"] = "offline"
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
+
+
+
+# set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
+tokenizer.truncation_side = 'left'
 
+new_tokens = ['<|Text|>',  '<|Image|>']  # 你要添加的特殊字符列表
+num_added_toks = tokenizer.add_tokens(new_tokens)
+new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
+print("new_tokens_ids: ", new_tokens_ids)
 
 
 def formatting_func(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<|Question|>\n{question}{tokenizer.eos_token}\n" + f"<|Answer|>\n{answer}{tokenizer.eos_token}\n\n"
+    text = f"<|Text|> {question}{tokenizer.eos_token} " + f"{answer}{tokenizer.eos_token}\n"
     examples["text"] = text
     # examples["image"] = examples["image"]
     return examples
@@ -87,19 +100,24 @@ if script_args.select_data_num>0:
 else:
     split_text = "train"
     
+
+
+
 dataset = load_dataset(script_args.dataset_name, split=split_text)
 dataset = dataset.train_test_split(test_size=0.1)
 dataset = dataset.map(formatting_func, num_proc=4, remove_columns=["question", "answer"])
 train_dataset = dataset["train"]
 eval_dataset = dataset["test"]
 
-model = MyCustomModel(script_args.clip_name, 
+model = MyCustomModel(script_args.llm_requires_grad, 
+                      script_args.clip_name, 
                       script_args.load_in_8bit, 
                       script_args.load_in_4bit, 
                       script_args.llm_name, 
                       script_args.trust_remote_code, 
                       script_args.token, 
-                      tokenizer)
+                      tokenizer,
+                      new_tokens_ids[-1])
 
 
 training_args = TrainingArguments(
@@ -151,9 +169,9 @@ trainer = CustomTrainer(
 )
 
 
+# trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)
 trainer.train()
-# trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint,)
-# model.save_pretrained("./my_custom_model")
+
 
 
 

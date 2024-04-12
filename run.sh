@@ -4,10 +4,8 @@ nohup accelerate launch --config_file=/raid/hpc/hekai/WorkShop/My_project/PathLL
 
 
 
-accelerate launch --config_file=/raid/hpc/hekai/WorkShop/My_project/PathLLM_new/accelerate_configs/deepspeed_zero2.yaml  run.py
+accelerate launch --config_file=/raid/hpc/hekai/WorkShop/My_project/PathLLM_new/accelerate_configs/deepspeed_zero2.yaml  run.py --gpu 6 --train_batch_size 16   --eval_batch_size 16 --max_seq_length 256
+
 accelerate launch --config_file=/raid/hpc/hekai/WorkShop/My_project/PathLLM_new/accelerate_configs/deepspeed_zero3.yaml  run.py
 
 
-# train_batch_size: Optional[int] = field(default=40, metadata={"help": "the batch size"})
-# eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
-# max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})

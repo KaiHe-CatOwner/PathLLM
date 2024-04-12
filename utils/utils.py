@@ -26,7 +26,9 @@ def my_compute_metrics(p):
     predictions, labels = p
     predictions = np.argmax(predictions, axis=-1)
     
-    mask = labels != -1
+    predictions = predictions[:, 2:]
+
+    mask = labels != -100
     correct = (labels == predictions) & mask
     accuracy =  round(np.mean(correct) *100, 2)
 

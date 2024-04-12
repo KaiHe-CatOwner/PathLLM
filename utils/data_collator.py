@@ -58,6 +58,7 @@ class MyDataCollatorForLanguageModeling(DataCollatorMixin):
         labels = batch["input_ids"].clone()
         if self.tokenizer.pad_token_id is not None:
             labels[labels == self.tokenizer.pad_token_id] = -100
+
         batch["labels"] = labels
         batch["image"] = torch.stack(temp_list)
 

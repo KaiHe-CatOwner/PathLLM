@@ -8,7 +8,7 @@ from utils.utils import clip_path_map
 
 
 class MyCustomModel(nn.Module):
-    def __init__(self, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer):
+    def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer, image_token_id):
         nn.Module.__init__(self)
 
         self.vision_encoder, self.image_processor = self.load_vision_encoder(clip_name)
@@ -21,9 +21,9 @@ class MyCustomModel(nn.Module):
         self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8,  batch_first=True)
         
         self.config = self.llm.config
-        
+        self.image_token_id = image_token_id
         self.vision_encoder.requires_grad = False
-        # self.llm.requires_grad = False
+        self.llm.requires_grad = llm_requires_grad
 
 
     def load_vision_encoder(self, clip_name):
@@ -54,8 +54,12 @@ class MyCustomModel(nn.Module):
             )
         
         with torch.no_grad():
-            fusion_embs = self.get_fusion_embedding(*args, **kwargs)
-            res = self.llm.generate(inputs_embeds=fusion_embs, generation_config=generation_config)
+            input_ids = kwargs["input_ids"]
+            image = kwargs["image"]
+            attention_mask = kwargs["attention_mask"]
+            fusion_embs = self.get_fusion_embedding(input_ids, image)
+            attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
+            res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=attention_mask, generation_config=generation_config)
 
         generate_list = []
         for item in res:
@@ -89,30 +93,54 @@ class MyCustomModel(nn.Module):
                     token=token,
                     use_cache= True,
                 )
-        
+        llm.resize_token_embeddings(len(self.llm_tokenizer))
         return llm
     
-    def get_fusion_embedding(self, *args, **kwargs):
-        input_ids = kwargs["input_ids"]
-        image = kwargs["image"]
+    def pad_attention_fusion(self, new_seq_len, need_pad_seq):
+        padd_len = new_seq_len - need_pad_seq.size(1)
+        bz = need_pad_seq.size(0)
 
+        generated_pad = torch.ones((bz, padd_len), dtype=need_pad_seq.dtype).to(need_pad_seq.device)
+
+        if self.llm_tokenizer.padding_side == "right":
+            paded_seq = torch.cat((need_pad_seq, generated_pad), dim=1)
+        else:
+            paded_seq = torch.cat((generated_pad, need_pad_seq), dim=1)
+
+        return paded_seq
+    
+    def pad_label_fusion(self, new_seq_len, labels):
+        padd_len = new_seq_len - labels.size(1)
+        bz = labels.size(0)
+
+        generated_pad = torch.ones((bz, padd_len), dtype=labels.dtype).fill_(-100).to(labels.device)
+        paded_seq = torch.cat((generated_pad, labels), dim=1)
+
+        return paded_seq
+
+
+    def get_fusion_embedding(self, input_ids, image):
         token_embs = self.embedding_layer(input_ids)
         image_embs = self.vision_encoder.encode_image(image, proj_contrast=False, normalize=False)
+        
         mapped_image_embs = self.fusion_layer_S(image_embs) # shape (bz, 512) - (bz, 4096)
         mapped_image_embs = self.fusion_layer_E(mapped_image_embs) # shape (bz, 4096)
-        mapped_image_embs = mapped_image_embs.unsqueeze(1).repeat(1, token_embs.size(1), 1)  # shape (bz, seq_len, llm_hidden_state)
-        fusion_embs = token_embs + mapped_image_embs
-
-        # fusion_embs = torch.cat((mapped_image_embs, token_embs), dim =1)
-        # if self.llm_tokenizer.padding_side == "right":
-        #     attention_mask = torch.cat((torch.ones((attention_mask.size(0), 1)).to(attention_mask.device), attention_mask), dim=1)
-        # else:
-        #     attention_mask = torch.cat((attention_mask, torch.ones((attention_mask.size(0), 1)).to(attention_mask.device)), dim=1)
+        mapped_image_embs = mapped_image_embs.unsqueeze(1) # shape (bz, 1, llm_hidden_state)
+        
+        image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(mapped_image_embs.device))
+        batch_image_token_emb = image_token_emb.repeat(mapped_image_embs.size(0), 1, 1)
+        fusion_embs =  torch.cat((batch_image_token_emb, mapped_image_embs, token_embs), dim=1)
         return fusion_embs
     
     def forward(self, *args, **kwargs):
-        labels = kwargs["labels"]
+        input_ids = kwargs["input_ids"]
+        image = kwargs["image"]
         attention_mask = kwargs["attention_mask"]
-        fusion_embs = self.get_fusion_embedding(*args, **kwargs)
+        labels = kwargs["labels"]
+    
+        fusion_embs = self.get_fusion_embedding(input_ids, image)
+        attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
+        labels = self.pad_label_fusion(fusion_embs.size(1), labels)
+
         output = self.llm(inputs_embeds=fusion_embs, attention_mask=attention_mask, labels=labels)
         return output

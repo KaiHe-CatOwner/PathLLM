@@ -42,6 +42,7 @@ class MyDataCollatorForLanguageModeling(DataCollatorMixin):
         
         temp_list = []
         for d in examples:
+            # print(np.array(d["image"]).shape)
             temp_list.append(self.image_processor(d["image"]))
             del d["image"]
 

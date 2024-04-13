@@ -17,7 +17,7 @@ class ScriptArguments:
     """
 
     # system config
-    gpu: Optional[str] = field(default="6", metadata={"help": "gpu"})
+    gpu: Optional[str] = field(default="2", metadata={"help": "gpu"})
     load_in_8bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 8 bits precision"})
     load_in_4bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 4 bits precision"})
     trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
@@ -26,10 +26,10 @@ class ScriptArguments:
 
     # model
     llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name，  meta-llama/Llama-2-7b-chat-hf "})
-    clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base "})
+    clip_name: Optional[str] = field(default="uni", metadata={"help": "the model name，  conch / pathclip-base / uni"})
     
     # data
-    select_data_num: Optional[int] = field(default=-100, metadata={"help": "the number of training data， -1 mean use all data"})
+    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
     dataset_name: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": " CNX-PathLLM/TextbookPath / CNX-PathLLM/PVQAClean /  stingning/ultrachat "})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     
@@ -69,7 +69,7 @@ parser = HfArgumentParser(ScriptArguments)
 script_args = parser.parse_args_into_dataclasses()[0]
 seed_everything(script_args.seed)
 
-os.environ["WANDB_MODE"] = "offline"
+# os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 
@@ -103,7 +103,7 @@ else:
 
 
 
-dataset = load_dataset(script_args.dataset_name, split=split_text)
+dataset = load_dataset(script_args.dataset_name, split=split_text, cache_dir="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache")
 dataset = dataset.train_test_split(test_size=0.1)
 dataset = dataset.map(formatting_func, num_proc=4, remove_columns=["question", "answer"])
 train_dataset = dataset["train"]

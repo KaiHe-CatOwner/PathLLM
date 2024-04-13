@@ -1,0 +1,183 @@
+2024-04-12 16:06:55,515 INFO    StreamThr :3573506 [internal.py:wandb_internal():87] W&B internal server running at pid: 3573506, started at: 2024-04-12 16:06:55.498935
+2024-04-12 16:06:55,562 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: status
+2024-04-12 16:06:55,574 INFO    WriterThread:3573506 [datastore.py:open_for_write():85] open: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/run-mzljzs5o.wandb
+2024-04-12 16:06:55,584 DEBUG   SenderThread:3573506 [sender.py:send():336] send: header
+2024-04-12 16:06:55,587 DEBUG   SenderThread:3573506 [sender.py:send():336] send: run
+2024-04-12 16:06:56,011 INFO    SenderThread:3573506 [dir_watcher.py:__init__():216] watching files in: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files
+2024-04-12 16:06:56,011 INFO    SenderThread:3573506 [sender.py:_start_run_threads():1067] run started: mzljzs5o with start time 1712934415.482394
+2024-04-12 16:06:56,011 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: summary_record
+2024-04-12 16:06:56,013 INFO    SenderThread:3573506 [sender.py:_save_file():1321] saving file wandb-summary.json with policy end
+2024-04-12 16:06:56,015 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: check_version
+2024-04-12 16:06:56,015 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: check_version
+2024-04-12 16:06:56,092 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: run_start
+2024-04-12 16:06:56,114 DEBUG   HandlerThread:3573506 [system_info.py:__init__():31] System info init
+2024-04-12 16:06:56,115 DEBUG   HandlerThread:3573506 [system_info.py:__init__():46] System info init done
+2024-04-12 16:06:56,115 INFO    HandlerThread:3573506 [system_monitor.py:start():151] Starting system monitor
+2024-04-12 16:06:56,115 INFO    SystemMonitor:3573506 [system_monitor.py:_start():116] Starting system asset monitoring threads
+2024-04-12 16:06:56,116 INFO    HandlerThread:3573506 [system_monitor.py:probe():172] Collecting system info
+2024-04-12 16:06:56,116 INFO    SystemMonitor:3573506 [interfaces.py:start():168] Started cpu
+2024-04-12 16:06:56,117 INFO    SystemMonitor:3573506 [interfaces.py:start():168] Started disk
+2024-04-12 16:06:56,119 INFO    SystemMonitor:3573506 [interfaces.py:start():168] Started gpu
+2024-04-12 16:06:56,122 INFO    SystemMonitor:3573506 [interfaces.py:start():168] Started memory
+2024-04-12 16:06:56,123 INFO    SystemMonitor:3573506 [interfaces.py:start():168] Started network
+2024-04-12 16:06:56,180 DEBUG   HandlerThread:3573506 [system_info.py:probe():195] Probing system
+2024-04-12 16:06:56,198 DEBUG   HandlerThread:3573506 [system_info.py:_probe_git():180] Probing git
+2024-04-12 16:06:56,244 DEBUG   HandlerThread:3573506 [system_info.py:_probe_git():188] Probing git done
+2024-04-12 16:06:56,244 DEBUG   HandlerThread:3573506 [system_info.py:probe():241] Probing system done
+2024-04-12 16:06:56,244 DEBUG   HandlerThread:3573506 [system_monitor.py:probe():181] {'os': 'Linux-4.18.0-513.11.1.el8_9.x86_64-x86_64-with-glibc2.2.5', 'python': '3.8.6', 'heartbeatAt': '2024-04-12T15:06:56.180433', 'startedAt': '2024-04-12T15:06:55.459086', 'docker': None, 'cuda': None, 'args': ('--gpu', '2', '--train_batch_size', '8', '--eval_batch_size', '8', '--max_seq_length', '256'), 'state': 'running', 'program': 'run.py', 'codePath': 'run.py', 'git': {'remote': 'https://github.com/ZeyuGaoAi/PathLLM.git', 'commit': '886c98e890c5eef222e8c5cfbafe39f0b31bda92'}, 'email': None, 'root': '/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM', 'host': 'bask-pg0309u38a', 'username': 'asiw9691', 'executable': '/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/medfla2/bin/python', 'cpu_count': 72, 'cpu_count_logical': 144, 'cpu_freq': {'current': 2398.8919513888886, 'min': 0.0, 'max': 0.0}, 'cpu_freq_per_core': [{'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 3484.788, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 1160.094, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 3500.002, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}, {'current': 2400.0, 'min': 0.0, 'max': 0.0}], 'disk': {'total': 19.990234375, 'used': 4.753864288330078}, 'gpu': 'NVIDIA A100-SXM4-80GB', 'gpu_count': 2, 'gpu_devices': [{'name': 'NVIDIA A100-SXM4-80GB', 'memory_total': 85899345920}, {'name': 'NVIDIA A100-SXM4-80GB', 'memory_total': 85899345920}], 'memory': {'total': 503.4986457824707}}
+2024-04-12 16:06:56,248 INFO    HandlerThread:3573506 [system_monitor.py:probe():182] Finished collecting system info
+2024-04-12 16:06:56,248 INFO    HandlerThread:3573506 [system_monitor.py:probe():185] Publishing system info
+2024-04-12 16:06:56,248 DEBUG   HandlerThread:3573506 [system_info.py:_save_pip():51] Saving list of pip packages installed into the current environment
+2024-04-12 16:06:56,251 DEBUG   HandlerThread:3573506 [system_info.py:_save_pip():67] Saving pip packages done
+2024-04-12 16:06:56,255 INFO    HandlerThread:3573506 [system_monitor.py:probe():187] Finished publishing system info
+2024-04-12 16:06:56,262 DEBUG   SenderThread:3573506 [sender.py:send():336] send: files
+2024-04-12 16:06:56,263 INFO    SenderThread:3573506 [sender.py:_save_file():1321] saving file wandb-metadata.json with policy now
+2024-04-12 16:06:56,280 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: stop_status
+2024-04-12 16:06:56,281 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: stop_status
+2024-04-12 16:06:56,504 DEBUG   SenderThread:3573506 [sender.py:send():336] send: telemetry
+2024-04-12 16:06:56,505 DEBUG   SenderThread:3573506 [sender.py:send():336] send: config
+2024-04-12 16:06:56,506 DEBUG   SenderThread:3573506 [sender.py:send():336] send: metric
+2024-04-12 16:06:56,506 DEBUG   SenderThread:3573506 [sender.py:send():336] send: telemetry
+2024-04-12 16:06:56,506 DEBUG   SenderThread:3573506 [sender.py:send():336] send: metric
+2024-04-12 16:06:56,506 WARNING SenderThread:3573506 [sender.py:send_metric():1272] Seen metric with glob (shouldn't happen)
+2024-04-12 16:06:56,506 DEBUG   SenderThread:3573506 [sender.py:send():336] send: telemetry
+2024-04-12 16:06:56,789 INFO    wandb-upload_0:3573506 [upload_job.py:push():138] Uploaded file /tmp/tmpl9ekafxvwandb/65ku3lne-wandb-metadata.json
+2024-04-12 16:06:57,013 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_created():275] file/dir created: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/output.log
+2024-04-12 16:06:57,014 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_created():275] file/dir created: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/wandb-summary.json
+2024-04-12 16:06:57,014 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_created():275] file/dir created: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/requirements.txt
+2024-04-12 16:06:57,014 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_created():275] file/dir created: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/wandb-metadata.json
+2024-04-12 16:06:57,307 DEBUG   SenderThread:3573506 [sender.py:send():336] send: exit
+2024-04-12 16:06:57,307 INFO    SenderThread:3573506 [sender.py:send_exit():559] handling exit code: 1
+2024-04-12 16:06:57,307 INFO    SenderThread:3573506 [sender.py:send_exit():561] handling runtime: 1
+2024-04-12 16:06:57,308 INFO    SenderThread:3573506 [sender.py:_save_file():1321] saving file wandb-summary.json with policy end
+2024-04-12 16:06:57,308 INFO    SenderThread:3573506 [sender.py:send_exit():567] send defer
+2024-04-12 16:06:57,308 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,308 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 0
+2024-04-12 16:06:57,308 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,308 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 0
+2024-04-12 16:06:57,308 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 1
+2024-04-12 16:06:57,309 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,309 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 1
+2024-04-12 16:06:57,309 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,309 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 1
+2024-04-12 16:06:57,309 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 2
+2024-04-12 16:06:57,309 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,309 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 2
+2024-04-12 16:06:57,309 INFO    HandlerThread:3573506 [system_monitor.py:finish():161] Stopping system monitor
+2024-04-12 16:06:57,309 DEBUG   SystemMonitor:3573506 [system_monitor.py:_start():130] Starting system metrics aggregation loop
+2024-04-12 16:06:57,309 DEBUG   SystemMonitor:3573506 [system_monitor.py:_start():137] Finished system metrics aggregation loop
+2024-04-12 16:06:57,310 DEBUG   SystemMonitor:3573506 [system_monitor.py:_start():141] Publishing last batch of metrics
+2024-04-12 16:06:57,311 INFO    HandlerThread:3573506 [interfaces.py:finish():175] Joined cpu
+2024-04-12 16:06:57,311 INFO    HandlerThread:3573506 [interfaces.py:finish():175] Joined disk
+2024-04-12 16:06:57,632 INFO    HandlerThread:3573506 [interfaces.py:finish():175] Joined gpu
+2024-04-12 16:06:57,632 INFO    HandlerThread:3573506 [interfaces.py:finish():175] Joined memory
+2024-04-12 16:06:57,632 INFO    HandlerThread:3573506 [interfaces.py:finish():175] Joined network
+2024-04-12 16:06:57,633 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,633 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 2
+2024-04-12 16:06:57,633 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 3
+2024-04-12 16:06:57,633 DEBUG   SenderThread:3573506 [sender.py:send():336] send: stats
+2024-04-12 16:06:57,633 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,634 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 3
+2024-04-12 16:06:57,634 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,634 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 3
+2024-04-12 16:06:57,634 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 4
+2024-04-12 16:06:57,634 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,634 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 4
+2024-04-12 16:06:57,635 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,635 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 4
+2024-04-12 16:06:57,635 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 5
+2024-04-12 16:06:57,635 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,635 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 5
+2024-04-12 16:06:57,635 DEBUG   SenderThread:3573506 [sender.py:send():336] send: summary
+2024-04-12 16:06:57,635 INFO    SenderThread:3573506 [sender.py:_save_file():1321] saving file wandb-summary.json with policy end
+2024-04-12 16:06:57,636 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,636 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 5
+2024-04-12 16:06:57,636 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 6
+2024-04-12 16:06:57,636 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,636 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 6
+2024-04-12 16:06:57,636 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,636 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 6
+2024-04-12 16:06:57,641 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: status_report
+2024-04-12 16:06:57,872 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 7
+2024-04-12 16:06:57,872 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:57,872 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 7
+2024-04-12 16:06:57,872 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:57,872 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 7
+2024-04-12 16:06:58,013 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_modified():292] file/dir modified: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/wandb-summary.json
+2024-04-12 16:06:58,013 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_modified():292] file/dir modified: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/config.yaml
+2024-04-12 16:06:58,308 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: poll_exit
+2024-04-12 16:06:58,530 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 8
+2024-04-12 16:06:58,530 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: poll_exit
+2024-04-12 16:06:58,531 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:58,532 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 8
+2024-04-12 16:06:58,533 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:58,533 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 8
+2024-04-12 16:06:58,556 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 9
+2024-04-12 16:06:58,556 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:06:58,557 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 9
+2024-04-12 16:06:58,558 DEBUG   SenderThread:3573506 [sender.py:send():336] send: artifact
+2024-04-12 16:06:59,014 INFO    Thread-13 :3573506 [dir_watcher.py:_on_file_modified():292] file/dir modified: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/output.log
+2024-04-12 16:06:59,312 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: poll_exit
+2024-04-12 16:06:59,476 INFO    SenderThread:3573506 [sender.py:send_artifact():1417] sent artifact job-https___github.com_ZeyuGaoAi_PathLLM.git_run.py - {'id': 'QXJ0aWZhY3Q6Nzk0MTg4NDU3', 'digest': '3eb8c20aabfafdccc3be40e904642aa9', 'state': 'COMMITTED', 'aliases': [{'artifactCollectionName': 'job-https___github.com_ZeyuGaoAi_PathLLM.git_run.py', 'alias': 'latest'}, {'artifactCollectionName': 'job-https___github.com_ZeyuGaoAi_PathLLM.git_run.py', 'alias': 'v0'}], 'artifactSequence': {'id': 'QXJ0aWZhY3RDb2xsZWN0aW9uOjE2MjAyODQ0Mw==', 'latestArtifact': {'id': 'QXJ0aWZhY3Q6Nzk0MTg4NDU3', 'versionIndex': 0}}, 'version': 'v0'}
+2024-04-12 16:06:59,476 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:06:59,477 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 9
+2024-04-12 16:06:59,477 INFO    SenderThread:3573506 [dir_watcher.py:finish():362] shutting down directory watcher
+2024-04-12 16:07:00,015 INFO    SenderThread:3573506 [dir_watcher.py:finish():392] scan: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files
+2024-04-12 16:07:00,015 INFO    SenderThread:3573506 [dir_watcher.py:finish():406] scan save: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/wandb-metadata.json wandb-metadata.json
+2024-04-12 16:07:00,015 INFO    SenderThread:3573506 [dir_watcher.py:finish():406] scan save: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/config.yaml config.yaml
+2024-04-12 16:07:00,016 INFO    SenderThread:3573506 [dir_watcher.py:finish():406] scan save: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/requirements.txt requirements.txt
+2024-04-12 16:07:00,016 INFO    SenderThread:3573506 [dir_watcher.py:finish():406] scan save: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/wandb-summary.json wandb-summary.json
+2024-04-12 16:07:00,016 INFO    SenderThread:3573506 [dir_watcher.py:finish():406] scan save: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/output.log output.log
+2024-04-12 16:07:00,016 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 10
+2024-04-12 16:07:00,017 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: poll_exit
+2024-04-12 16:07:00,017 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:07:00,017 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 10
+2024-04-12 16:07:00,023 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:07:00,023 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 10
+2024-04-12 16:07:00,023 INFO    SenderThread:3573506 [file_pusher.py:finish():162] shutting down file pusher
+2024-04-12 16:07:00,313 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: poll_exit
+2024-04-12 16:07:00,314 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: poll_exit
+2024-04-12 16:07:00,459 INFO    wandb-upload_1:3573506 [upload_job.py:push():138] Uploaded file /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/requirements.txt
+2024-04-12 16:07:00,533 INFO    wandb-upload_3:3573506 [upload_job.py:push():138] Uploaded file /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/output.log
+2024-04-12 16:07:00,563 INFO    wandb-upload_2:3573506 [upload_job.py:push():138] Uploaded file /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/wandb-summary.json
+2024-04-12 16:07:00,563 INFO    wandb-upload_0:3573506 [upload_job.py:push():138] Uploaded file /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/files/config.yaml
+2024-04-12 16:07:00,764 INFO    Thread-12 :3573506 [sender.py:transition_state():587] send defer: 11
+2024-04-12 16:07:00,764 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:07:00,764 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 11
+2024-04-12 16:07:00,765 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:07:00,765 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 11
+2024-04-12 16:07:00,765 INFO    SenderThread:3573506 [file_pusher.py:join():167] waiting for file pusher
+2024-04-12 16:07:00,766 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 12
+2024-04-12 16:07:00,766 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:07:00,766 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 12
+2024-04-12 16:07:00,767 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:07:00,767 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 12
+2024-04-12 16:07:00,903 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 13
+2024-04-12 16:07:00,903 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:07:00,903 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 13
+2024-04-12 16:07:00,904 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:07:00,904 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 13
+2024-04-12 16:07:00,904 INFO    SenderThread:3573506 [sender.py:transition_state():587] send defer: 14
+2024-04-12 16:07:00,905 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: defer
+2024-04-12 16:07:00,905 DEBUG   SenderThread:3573506 [sender.py:send():336] send: final
+2024-04-12 16:07:00,906 INFO    HandlerThread:3573506 [handler.py:handle_request_defer():170] handle defer: 14
+2024-04-12 16:07:00,906 DEBUG   SenderThread:3573506 [sender.py:send():336] send: footer
+2024-04-12 16:07:00,906 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: defer
+2024-04-12 16:07:00,907 INFO    SenderThread:3573506 [sender.py:send_request_defer():583] handle sender defer: 14
+2024-04-12 16:07:00,908 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: poll_exit
+2024-04-12 16:07:00,909 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: poll_exit
+2024-04-12 16:07:00,909 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: poll_exit
+2024-04-12 16:07:00,910 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: server_info
+2024-04-12 16:07:00,911 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: poll_exit
+2024-04-12 16:07:00,912 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: get_summary
+2024-04-12 16:07:00,913 DEBUG   SenderThread:3573506 [sender.py:send_request():363] send_request: server_info
+2024-04-12 16:07:00,923 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: sampled_history
+2024-04-12 16:07:01,082 INFO    MainThread:3573506 [wandb_run.py:_footer_history_summary_info():3442] rendering history
+2024-04-12 16:07:01,082 INFO    MainThread:3573506 [wandb_run.py:_footer_history_summary_info():3474] rendering summary
+2024-04-12 16:07:01,082 INFO    MainThread:3573506 [wandb_run.py:_footer_sync_info():3398] logging synced files
+2024-04-12 16:07:01,083 DEBUG   HandlerThread:3573506 [handler.py:handle_request():144] handle_request: shutdown
+2024-04-12 16:07:01,083 INFO    HandlerThread:3573506 [handler.py:finish():841] shutting down handler
+2024-04-12 16:07:01,913 INFO    WriterThread:3573506 [datastore.py:close():299] close: /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240412_160655-mzljzs5o/run-mzljzs5o.wandb
+2024-04-12 16:07:02,082 INFO    SenderThread:3573506 [sender.py:finish():1493] shutting down sender
+2024-04-12 16:07:02,082 INFO    SenderThread:3573506 [file_pusher.py:finish():162] shutting down file pusher
+2024-04-12 16:07:02,082 INFO    SenderThread:3573506 [file_pusher.py:join():167] waiting for file pusher

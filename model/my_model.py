@@ -1,6 +1,9 @@
 # -*- coding:utf-8 -*-
+import os
 import torch
 import torch.nn as nn
+from torchvision import transforms
+import timm
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, GenerationConfig
 from accelerate import Accelerator
 import open_clip
@@ -11,13 +14,15 @@ class MyCustomModel(nn.Module):
     def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer, image_token_id):
         nn.Module.__init__(self)
 
-        self.vision_encoder, self.image_processor = self.load_vision_encoder(clip_name)
+        self.clip_name = clip_name
+
+        self.vision_encoder, self.image_processor, self.embed_dim = self.load_vision_encoder()
 
         self.llm_tokenizer = tokenizer
         self.llm = self.load_llm(load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token)
         self.embedding_layer = self.llm.get_input_embeddings()
 
-        self.fusion_layer_S = nn.Linear(self.vision_encoder.embed_dim, self.llm.config.hidden_size)
+        self.fusion_layer_S = nn.Linear(self.embed_dim, self.llm.config.hidden_size)
         self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8,  batch_first=True)
         
         self.config = self.llm.config
@@ -26,19 +31,36 @@ class MyCustomModel(nn.Module):
         self.llm.requires_grad = llm_requires_grad
 
 
-    def load_vision_encoder(self, clip_name):
+    def load_vision_encoder(self):
         print("vision_encoder loading ...")
 
-        clip_path = clip_path_map(clip_name)
-        if clip_name=="pathclip-base":
+        clip_path = clip_path_map(self.clip_name)
+        if self.clip_name=="pathclip-base":
             vision_encoder, _, image_processor = open_clip.create_model_and_transforms('ViT-B-16', pretrained=clip_path, force_quick_gelu=True)
-        elif clip_name=="conch": 
+            embed_dim = 512
+            vision_encoder.visual.output_tokens = True
+        elif self.clip_name=="conch": 
             from conch.open_clip_custom import create_model_from_pretrained
             vision_encoder, image_processor = create_model_from_pretrained('conch_ViT-B-16', clip_path)
+            embed_dim = 512
+            vision_encoder.visual.output_tokens = True
+        elif self.clip_name=="uni": 
+            vision_encoder = timm.create_model("vit_large_patch16_224", img_size=224, patch_size=16, init_values=1e-5, num_classes=0, dynamic_img_size=True)
+            vision_encoder.load_state_dict(torch.load(clip_path, map_location="cpu"), strict=True)
+            def rgba_to_rgb(image):
+                return image.convert('RGB')
+            image_processor = transforms.Compose(
+                                [
+                                    transforms.Lambda(rgba_to_rgb),
+                                    transforms.Resize((224,224)),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                                ]
+                            )
+            embed_dim = 1024
         else:
             raise Exception("wrong clip")
-        vision_encoder.visual.output_tokens = True
-        return vision_encoder, image_processor
+        return vision_encoder, image_processor, embed_dim
     
     def generate(self, *args, **kwargs):
         generation_config = GenerationConfig(
@@ -92,6 +114,7 @@ class MyCustomModel(nn.Module):
                     torch_dtype=torch_dtype,
                     token=token,
                     use_cache= True,
+                    cache_dir = "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"
                 )
         llm.resize_token_embeddings(len(self.llm_tokenizer))
         return llm
@@ -121,9 +144,16 @@ class MyCustomModel(nn.Module):
 
     def get_fusion_embedding(self, input_ids, image):
         token_embs = self.embedding_layer(input_ids)
-        image_embs = self.vision_encoder.encode_image(image, proj_contrast=False, normalize=False)
-        
-        mapped_image_embs = self.fusion_layer_S(image_embs) # shape (bz, 512) - (bz, 4096)
+        if self.clip_name == 'uni':
+            image_embs = self.vision_encoder(image) # no proj_contrast=False for clip
+        else:
+            image_embs = self.vision_encoder.encode_image(image, normalize=False) # no proj_contrast=False for clip
+        # print(image_embs.shape)
+        # image_embs = torch.stack(image_embs, dim=0)
+        if self.clip_name == 'pathclip-base':
+            mapped_image_embs = self.fusion_layer_S(image_embs[0]) # shape (bz, 512) - (bz, 4096)
+        else:
+            mapped_image_embs = self.fusion_layer_S(image_embs) # shape (bz, 512) - (bz, 4096)
         mapped_image_embs = self.fusion_layer_E(mapped_image_embs) # shape (bz, 4096)
         mapped_image_embs = mapped_image_embs.unsqueeze(1) # shape (bz, 1, llm_hidden_state)
         
@@ -137,7 +167,6 @@ class MyCustomModel(nn.Module):
         image = kwargs["image"]
         attention_mask = kwargs["attention_mask"]
         labels = kwargs["labels"]
-    
         fusion_embs = self.get_fusion_embedding(input_ids, image)
         attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
         labels = self.pad_label_fusion(fusion_embs.size(1), labels)

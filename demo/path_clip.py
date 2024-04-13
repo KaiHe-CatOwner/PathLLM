@@ -4,7 +4,7 @@ from PIL import Image
 import open_clip
 
 ## load the model
-model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-16', pretrained='/raid/hpc/hekai/WorkShop/My_project/PathLLM_new/load_weights/pathclip/pathclip-base.pt',
+model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-16', pretrained="/bask/homes/a/asiw9691/PathVLM/PathClip/pathclip-base.pt",
                                                         force_quick_gelu=True)
 tokenizer = open_clip.get_tokenizer('ViT-B-16')
 model = model.cuda()

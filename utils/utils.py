@@ -16,10 +16,13 @@ def seed_everything(seed=42):
 
 def clip_path_map(path):
     if path=="pathclip-base":
-        return "load_weights/pathclip/pathclip-base.pt"
+        return "/bask/homes/a/asiw9691/PathVLM/PathClip/pathclip-base.pt"
     
     if path=="conch":
-        return "load_weights/conch/pytorch_model.bin"
+        return "/bask/homes/a/asiw9691/PathVLM/CONCH/pytorch_model.bin"
+    
+    if path=="uni":
+        return "/bask/homes/a/asiw9691/PathVLM/UNI/pytorch_model.bin"
 
 
 def my_compute_metrics(p):

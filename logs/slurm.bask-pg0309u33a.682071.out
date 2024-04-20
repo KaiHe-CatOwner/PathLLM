@@ -68,3 +68,4 @@ Time to load cpu_adam op: 3.0211403369903564 seconds
 {'loss': 1.4803, 'grad_norm': 2.2186999320983887, 'learning_rate': 1.5831202046035808e-05, 'epoch': 0.29}
 {'loss': 1.4547, 'grad_norm': 2.183539628982544, 'learning_rate': 1.5703324808184145e-05, 'epoch': 0.29}
 {'loss': 1.4703, 'grad_norm': 2.3096163272857666, 'learning_rate': 1.5575447570332483e-05, 'epoch': 0.3}
+{'loss': 1.4921, 'grad_norm': 2.436066150665283, 'learning_rate': 1.544757033248082e-05, 'epoch': 0.3}

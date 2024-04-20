@@ -1,0 +1,942 @@
+
+
+  0%|          | 1/5472 [01:11<108:25:53, 71.35s/it]
+
+
+
+  0%|          | 4/5472 [03:57<87:31:30, 57.62s/it]
+
+
+
+
+
+  0%|          | 9/5472 [08:33<84:25:20, 55.63s/it]
+
+
+
+
+
+
+  0%|          | 15/5472 [14:03<83:00:41, 54.76s/it]
+
+
+
+
+
+  0%|          | 20/5472 [18:37<83:01:14, 54.82s/it]
+
+
+
+
+  0%|          | 24/5472 [22:16<82:56:36, 54.81s/it]
+
+
+
+
+
+  1%|          | 29/5472 [26:50<82:41:07, 54.69s/it]
+
+
+
+
+
+
+  1%|          | 35/5472 [32:19<82:50:33, 54.85s/it]
+
+
+
+
+
+  1%|          | 40/5472 [36:53<82:44:23, 54.83s/it]
+
+
+
+
+
+  1%|          | 45/5472 [41:28<82:54:28, 55.00s/it]
+
+
+
+
+  1%|          | 49/5472 [45:09<83:00:22, 55.10s/it]
+
+  1%|          | 50/5472 [46:03<82:34:12, 54.82s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  1%|          | 54/5472 [50:59<94:32:33, 62.82s/it]
+
+
+
+
+
+  1%|          | 59/5472 [55:33<84:17:03, 56.05s/it]
+
+
+
+
+
+  1%|          | 64/5472 [1:00:08<82:53:37, 55.18s/it]
+
+
+
+
+
+  1%|▏         | 69/5472 [1:04:44<82:56:34, 55.26s/it]
+
+
+
+
+
+  1%|▏         | 74/5472 [1:09:19<82:20:50, 54.92s/it]
+
+
+
+
+
+
+  1%|▏         | 80/5472 [1:14:50<82:34:30, 55.13s/it]
+
+
+
+
+
+  2%|▏         | 85/5472 [1:19:27<82:40:02, 55.24s/it]
+
+
+
+
+  2%|▏         | 89/5472 [1:23:06<82:10:14, 54.95s/it]
+
+
+
+
+
+  2%|▏         | 94/5472 [1:27:44<82:57:06, 55.53s/it]
+
+
+
+
+
+
+  2%|▏         | 100/5472 [1:33:14<82:11:17, 55.08s/it]
+  2%|▏         | 100/5472 [1:33:14<82:11:17, 55.08s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  2%|▏         | 104/5472 [1:38:08<93:52:57, 62.96s/it]
+
+
+
+
+
+  2%|▏         | 109/5472 [1:42:45<84:37:12, 56.80s/it]
+
+
+
+
+
+  2%|▏         | 114/5472 [1:47:19<82:17:36, 55.29s/it]
+
+
+
+
+
+
+  2%|▏         | 120/5472 [1:52:48<81:21:26, 54.72s/it]
+
+
+
+
+
+  2%|▏         | 125/5472 [1:57:25<81:42:32, 55.01s/it]
+
+
+
+
+
+  2%|▏         | 130/5472 [2:02:01<81:49:45, 55.15s/it]
+
+
+
+
+  2%|▏         | 134/5472 [2:05:42<81:40:34, 55.08s/it]
+
+
+
+
+
+  3%|▎         | 139/5472 [2:10:19<82:01:36, 55.37s/it]
+
+
+
+
+
+
+  3%|▎         | 145/5472 [2:15:51<81:47:35, 55.28s/it]
+
+
+
+
+
+  3%|▎         | 150/5472 [2:20:25<81:10:22, 54.91s/it]
+  3%|▎         | 150/5472 [2:20:25<81:10:22, 54.91s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  3%|▎         | 154/5472 [2:25:19<92:17:43, 62.48s/it]
+
+
+
+
+
+
+  3%|▎         | 160/5472 [2:30:48<82:30:10, 55.91s/it]
+
+
+
+
+  3%|▎         | 164/5472 [2:34:27<80:57:13, 54.90s/it]
+
+
+
+
+
+  3%|▎         | 169/5472 [2:39:09<82:59:45, 56.34s/it]
+
+
+
+
+
+
+  3%|▎         | 175/5472 [2:44:38<81:11:57, 55.19s/it]
+
+
+
+
+
+  3%|▎         | 180/5472 [2:49:12<80:46:36, 54.95s/it]
+
+
+
+
+  3%|▎         | 184/5472 [2:52:53<81:02:55, 55.18s/it]
+
+
+
+
+
+
+  3%|▎         | 190/5472 [2:58:23<80:52:23, 55.12s/it]
+
+
+
+
+  4%|▎         | 194/5472 [3:02:02<80:15:07, 54.74s/it]
+
+
+
+
+
+  4%|▎         | 199/5472 [3:06:37<80:33:29, 55.00s/it]
+
+  4%|▎         | 200/5472 [3:07:32<80:25:13, 54.92s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+
+  4%|▎         | 205/5472 [3:13:18<87:41:59, 59.94s/it]
+
+
+
+
+
+  4%|▍         | 210/5472 [3:17:50<80:44:44, 55.24s/it]
+
+
+
+
+  4%|▍         | 214/5472 [3:21:31<80:30:59, 55.13s/it]
+
+
+
+
+
+
+  4%|▍         | 220/5472 [3:27:01<80:15:50, 55.02s/it]
+
+
+
+
+
+  4%|▍         | 225/5472 [3:31:34<79:39:38, 54.66s/it]
+
+
+
+
+  4%|▍         | 229/5472 [3:35:13<79:30:02, 54.59s/it]
+
+
+
+
+
+  4%|▍         | 234/5472 [3:39:47<79:40:43, 54.76s/it]
+
+
+
+
+
+  4%|▍         | 239/5472 [3:44:20<79:25:52, 54.64s/it]
+
+
+
+
+
+
+  4%|▍         | 245/5472 [3:49:48<79:17:24, 54.61s/it]
+
+
+
+
+
+  5%|▍         | 250/5472 [3:54:22<79:18:08, 54.67s/it]
+  5%|▍         | 250/5472 [3:54:22<79:18:08, 54.67s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+
+  5%|▍         | 255/5472 [4:00:09<86:54:27, 59.97s/it]
+
+
+
+
+  5%|▍         | 259/5472 [4:03:47<80:43:28, 55.75s/it]
+
+
+
+
+
+  5%|▍         | 264/5472 [4:08:21<79:17:28, 54.81s/it]
+
+
+
+
+
+  5%|▍         | 269/5472 [4:12:56<79:26:50, 54.97s/it]
+
+
+
+
+
+  5%|▌         | 274/5472 [4:17:30<78:59:59, 54.71s/it]
+
+
+
+
+
+  5%|▌         | 279/5472 [4:22:04<79:07:44, 54.86s/it]
+
+
+
+
+
+  5%|▌         | 284/5472 [4:26:39<79:10:56, 54.95s/it]
+
+
+
+
+
+  5%|▌         | 289/5472 [4:31:12<78:39:05, 54.63s/it]
+
+
+
+
+
+
+  5%|▌         | 295/5472 [4:36:40<78:38:06, 54.68s/it]
+
+
+
+
+  5%|▌         | 299/5472 [4:40:18<78:08:28, 54.38s/it]
+
+  5%|▌         | 300/5472 [4:41:12<78:20:38, 54.53s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  6%|▌         | 304/5472 [4:46:05<89:21:15, 62.24s/it]
+
+
+
+
+
+  6%|▌         | 309/5472 [4:50:37<79:54:37, 55.72s/it]
+
+
+
+
+
+  6%|▌         | 314/5472 [4:55:10<78:28:29, 54.77s/it]
+
+
+
+
+
+
+  6%|▌         | 320/5472 [5:00:36<77:52:32, 54.42s/it]
+
+
+
+
+
+  6%|▌         | 325/5472 [5:05:09<77:53:14, 54.48s/it]
+
+
+
+
+
+  6%|▌         | 330/5472 [5:09:43<78:15:44, 54.79s/it]
+
+
+
+
+  6%|▌         | 334/5472 [5:13:21<77:36:57, 54.38s/it]
+
+
+
+
+
+  6%|▌         | 339/5472 [5:17:53<77:28:40, 54.34s/it]
+
+
+
+
+
+
+  6%|▋         | 345/5472 [5:23:19<77:30:06, 54.42s/it]
+
+
+
+
+  6%|▋         | 349/5472 [5:26:58<77:45:04, 54.64s/it]
+
+  6%|▋         | 350/5472 [5:27:53<77:50:59, 54.72s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  6%|▋         | 354/5472 [5:32:43<87:55:33, 61.85s/it]
+
+
+
+
+
+
+  7%|▋         | 360/5472 [5:38:11<78:50:57, 55.53s/it]
+
+
+
+
+  7%|▋         | 364/5472 [5:41:48<77:30:41, 54.63s/it]
+
+
+
+
+
+  7%|▋         | 369/5472 [5:46:21<77:22:53, 54.59s/it]
+
+
+
+
+
+  7%|▋         | 374/5472 [5:50:53<77:07:26, 54.46s/it]
+
+
+
+
+
+  7%|▋         | 379/5472 [5:55:25<76:51:44, 54.33s/it]
+
+
+
+
+
+
+  7%|▋         | 385/5472 [6:00:51<76:47:56, 54.35s/it]
+
+
+
+
+
+  7%|▋         | 390/5472 [6:05:24<76:54:22, 54.48s/it]
+
+
+
+
+
+  7%|▋         | 395/5472 [6:09:54<76:12:32, 54.04s/it]
+
+
+
+
+  7%|▋         | 399/5472 [6:13:30<75:49:14, 53.81s/it]
+
+  7%|▋         | 400/5472 [6:14:24<75:41:43, 53.73s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+
+  7%|▋         | 405/5472 [6:20:10<84:00:33, 59.69s/it]
+
+
+
+
+  7%|▋         | 409/5472 [6:23:47<78:04:48, 55.52s/it]
+
+
+
+
+
+  8%|▊         | 414/5472 [6:28:19<76:46:11, 54.64s/it]
+
+
+
+
+
+  8%|▊         | 419/5472 [6:32:50<75:56:28, 54.10s/it]
+
+
+
+
+
+  8%|▊         | 424/5472 [6:37:21<75:49:55, 54.08s/it]
+
+
+
+
+
+  8%|▊         | 429/5472 [6:41:52<75:54:35, 54.19s/it]
+
+
+
+
+
+  8%|▊         | 434/5472 [6:46:21<75:22:20, 53.86s/it]
+
+
+
+
+
+  8%|▊         | 439/5472 [6:50:50<75:19:39, 53.88s/it]
+
+
+
+
+
+  8%|▊         | 444/5472 [6:55:19<75:18:06, 53.92s/it]
+
+
+
+
+
+  8%|▊         | 449/5472 [6:59:50<75:23:10, 54.03s/it]
+
+  8%|▊         | 450/5472 [7:00:44<75:31:23, 54.14s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  8%|▊         | 454/5472 [7:05:33<85:51:07, 61.59s/it]
+
+
+
+
+
+  8%|▊         | 459/5472 [7:10:03<76:55:49, 55.25s/it]
+
+
+
+
+
+  8%|▊         | 464/5472 [7:14:32<75:15:35, 54.10s/it]
+
+
+
+
+
+  9%|▊         | 469/5472 [7:19:00<74:38:46, 53.71s/it]
+
+
+
+
+
+  9%|▊         | 474/5472 [7:23:29<74:32:34, 53.69s/it]
+
+
+
+
+
+  9%|▉         | 479/5472 [7:27:58<74:36:51, 53.80s/it]
+
+
+
+
+
+  9%|▉         | 484/5472 [7:32:27<74:25:02, 53.71s/it]
+
+
+
+
+
+  9%|▉         | 489/5472 [7:36:56<74:29:03, 53.81s/it]
+
+
+
+
+
+  9%|▉         | 494/5472 [7:41:24<74:12:31, 53.67s/it]
+
+
+
+
+
+
+  9%|▉         | 500/5472 [7:46:47<74:14:02, 53.75s/it]
+  9%|▉         | 500/5472 [7:46:47<74:14:02, 53.75s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+  9%|▉         | 504/5472 [7:51:35<84:38:58, 61.34s/it]
+
+
+
+
+
+
+  9%|▉         | 510/5472 [7:56:59<75:45:03, 54.96s/it]
+
+
+
+
+
+  9%|▉         | 515/5472 [8:01:28<74:19:43, 53.98s/it]
+
+
+
+
+  9%|▉         | 519/5472 [8:05:03<74:06:11, 53.86s/it]
+
+
+
+
+
+ 10%|▉         | 524/5472 [8:09:31<73:40:19, 53.60s/it]
+
+
+
+
+
+ 10%|▉         | 529/5472 [8:14:00<73:49:26, 53.77s/it]
+
+
+
+
+
+ 10%|▉         | 534/5472 [8:18:28<73:43:46, 53.75s/it]
+
+
+
+
+
+ 10%|▉         | 539/5472 [8:22:58<73:46:01, 53.83s/it]
+
+
+
+
+
+ 10%|▉         | 544/5472 [8:27:28<73:43:56, 53.86s/it]
+
+
+
+
+
+ 10%|█         | 549/5472 [8:31:57<73:29:56, 53.75s/it]
+
+ 10%|█         | 550/5472 [8:32:50<73:28:04, 53.74s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+ 10%|█         | 554/5472 [8:37:38<83:41:42, 61.27s/it]
+
+
+
+
+
+
+ 10%|█         | 560/5472 [8:43:00<74:13:32, 54.40s/it]
+
+
+
+
+ 10%|█         | 564/5472 [8:46:35<73:32:47, 53.95s/it]
+
+
+
+
+
+
+ 10%|█         | 570/5472 [8:51:59<73:37:12, 54.07s/it]
+
+
+
+
+ 10%|█         | 574/5472 [8:55:34<73:18:24, 53.88s/it]
+
+
+
+
+
+
+ 11%|█         | 580/5472 [9:00:57<73:13:38, 53.89s/it]
+
+
+
+
+
+ 11%|█         | 585/5472 [9:05:26<73:09:33, 53.89s/it]
+
+
+
+
+
+ 11%|█         | 590/5472 [9:09:55<72:46:09, 53.66s/it]
+
+
+
+
+
+ 11%|█         | 595/5472 [9:14:23<72:38:52, 53.63s/it]
+
+
+
+
+ 11%|█         | 599/5472 [9:17:59<72:46:49, 53.77s/it]
+
+ 11%|█         | 600/5472 [9:18:52<72:41:03, 53.71s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+ 11%|█         | 604/5472 [9:23:41<83:00:13, 61.38s/it]
+
+
+
+
+
+
+ 11%|█         | 610/5472 [9:29:03<73:38:46, 54.53s/it]
+
+
+
+
+
+ 11%|█         | 615/5472 [9:33:31<72:34:48, 53.80s/it]
+
+
+
+
+ 11%|█▏        | 619/5472 [9:37:06<72:26:11, 53.73s/it]
+
+
+
+
+
+
+ 11%|█▏        | 625/5472 [9:42:28<72:21:59, 53.75s/it]
+
+
+
+
+
+ 12%|█▏        | 630/5472 [9:46:58<72:42:11, 54.05s/it]
+
+
+
+
+
+ 12%|█▏        | 635/5472 [9:51:27<72:10:30, 53.72s/it]
+
+
+
+
+
+ 12%|█▏        | 640/5472 [9:55:54<71:54:56, 53.58s/it]
+
+
+
+
+ 12%|█▏        | 644/5472 [9:59:30<72:21:45, 53.96s/it]
+
+
+
+
+
+ 12%|█▏        | 649/5472 [10:03:58<72:03:40, 53.79s/it]
+
+ 12%|█▏        | 650/5472 [10:04:52<71:51:24, 53.65s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+
+ 12%|█▏        | 655/5472 [10:10:35<79:14:12, 59.22s/it]
+
+
+
+
+ 12%|█▏        | 659/5472 [10:14:11<73:57:42, 55.32s/it]
+
+
+
+
+
+
+ 12%|█▏        | 665/5472 [10:19:35<72:02:38, 53.95s/it]
+
+
+
+
+
+ 12%|█▏        | 670/5472 [10:24:04<71:41:43, 53.75s/it]
+
+
+
+
+
+ 12%|█▏        | 675/5472 [10:28:35<71:57:53, 54.01s/it]
+
+
+
+
+
+ 12%|█▏        | 680/5472 [10:33:04<71:36:00, 53.79s/it]
+
+
+
+
+
+ 13%|█▎        | 685/5472 [10:37:32<71:19:36, 53.64s/it]
+
+
+
+
+
+ 13%|█▎        | 690/5472 [10:42:03<71:44:56, 54.01s/it]
+
+
+
+
+ 13%|█▎        | 694/5472 [10:45:38<71:08:37, 53.60s/it]
+
+
+
+
+
+
+ 13%|█▎        | 700/5472 [10:51:02<71:28:06, 53.92s/it]
+ 13%|█▎        | 700/5472 [10:51:02<71:28:06, 53.92s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+
+ 13%|█▎        | 705/5472 [10:56:47<78:56:52, 59.62s/it]
+
+
+
+
+ 13%|█▎        | 709/5472 [11:00:23<73:17:09, 55.39s/it]
+
+
+
+
+
+
+ 13%|█▎        | 715/5472 [11:05:45<71:18:15, 53.96s/it]
+
+
+
+
+
+ 13%|█▎        | 720/5472 [11:10:15<71:10:26, 53.92s/it]
+
+
+
+
+
+ 13%|█▎        | 725/5472 [11:14:43<70:48:09, 53.69s/it]
+
+
+
+
+ 13%|█▎        | 729/5472 [11:18:17<70:35:52, 53.58s/it]
+
+
+
+
+
+
+ 13%|█▎        | 735/5472 [11:23:38<70:26:29, 53.53s/it]
+
+
+
+
+
+ 14%|█▎        | 740/5472 [11:28:07<70:30:46, 53.64s/it]
+
+
+
+
+
+ 14%|█▎        | 745/5472 [11:32:35<70:32:53, 53.73s/it]
+
+
+
+
+
+ 14%|█▎        | 750/5472 [11:37:06<70:43:09, 53.92s/it]
+ 14%|█▎        | 750/5472 [11:37:06<70:43:09, 53.92s/it]/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/nn/modules/module.py:1802: UserWarning: Positional args are being deprecated, use kwargs instead. Refer to https://pytorch.org/docs/master/generated/torch.nn.Module.html#torch.nn.Module.state_dict for details.
+  warnings.warn(
+
+
+
+
+ 14%|█▍        | 755/5472 [11:42:48<77:31:57, 59.17s/it]
+
+
+
+
+
+ 14%|█▍        | 760/5472 [11:47:15<71:01:10, 54.26s/it]
+
+
+
+
+
+ 14%|█▍        | 765/5472 [11:51:42<69:47:21, 53.38s/it]
+
+
+
+
+ 14%|█▍        | 769/5472 [11:55:15<69:49:40, 53.45s/it]
+
+

@@ -1,0 +1,55 @@
+
+
+  1%|▌                                                          | 1/100 [01:31<2:31:08, 91.61s/it]
+  1%|▌                                                          | 1/100 [01:31<2:31:08, 91.61s/it]Traceback (most recent call last):
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 179, in <module>
+    trainer.train()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2118, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3045, in training_step
+    self.accelerator.backward(loss)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py", line 2007, in backward
+    self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/utils/deepspeed.py", line 166, in backward
+    self.engine.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/utils/nvtx.py", line 15, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/engine.py", line 1976, in backward
+    self.optimizer.backward(loss, retain_graph=retain_graph)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 2051, in backward
+    self.loss_scaler.backward(loss.float(), retain_graph=retain_graph)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/fp16/loss_scaler.py", line 63, in backward
+    scaled_loss.backward(retain_graph=retain_graph)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/_tensor.py", line 487, in backward
+    torch.autograd.backward(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/autograd/__init__.py", line 200, in backward
+    Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 179, in <module>
+    trainer.train()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2118, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3045, in training_step
+    self.accelerator.backward(loss)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py", line 2007, in backward
+    self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/utils/deepspeed.py", line 166, in backward
+    self.engine.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/utils/nvtx.py", line 15, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/engine.py", line 1976, in backward
+    self.optimizer.backward(loss, retain_graph=retain_graph)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 2051, in backward
+    self.loss_scaler.backward(loss.float(), retain_graph=retain_graph)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/fp16/loss_scaler.py", line 63, in backward
+    scaled_loss.backward(retain_graph=retain_graph)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/_tensor.py", line 487, in backward
+    torch.autograd.backward(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/torch/autograd/__init__.py", line 200, in backward
+    Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+KeyboardInterrupt

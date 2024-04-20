@@ -1,0 +1,74 @@
+
+
+  1%|▊                                                           | 1/75 [01:35<1:57:50, 95.55s/it]
+
+
+
+  5%|███▏                                                        | 4/75 [05:25<1:34:06, 79.53s/it]Traceback (most recent call last):
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 179, in <module>
+    trainer.train()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2118, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3045, in training_step
+    self.accelerator.backward(loss)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py", line 2007, in backward
+    self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/utils/deepspeed.py", line 166, in backward
+    self.engine.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/utils/nvtx.py", line 15, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/engine.py", line 2002, in backward
+    self.allreduce_gradients()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/utils/nvtx.py", line 15, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/engine.py", line 1918, in allreduce_gradients
+    self.optimizer.overlapping_partition_gradients_reduce_epilogue()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 859, in overlapping_partition_gradients_reduce_epilogue
+    self.independent_gradient_partition_epilogue()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 750, in independent_gradient_partition_epilogue
+    self.reduce_ipg_grads()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1399, in reduce_ipg_grads
+    self.copy_grads_in_partition(param)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1320, in copy_grads_in_partition
+    self.async_accumulate_grad_in_cpu_via_gpu(param)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1221, in async_accumulate_grad_in_cpu_via_gpu
+    accumulate_gradients()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1198, in accumulate_gradients
+    dest_buffer.copy_(self.accumulated_grads_in_cpu[param_id].view(-1), non_blocking=True)
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 179, in <module>
+    trainer.train()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2118, in _inner_training_loop
+    tr_loss_step = self.training_step(model, inputs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3045, in training_step
+    self.accelerator.backward(loss)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py", line 2007, in backward
+    self.deepspeed_engine_wrapped.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/utils/deepspeed.py", line 166, in backward
+    self.engine.backward(loss, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/utils/nvtx.py", line 15, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/engine.py", line 2002, in backward
+    self.allreduce_gradients()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/utils/nvtx.py", line 15, in wrapped_fn
+    ret_val = func(*args, **kwargs)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/engine.py", line 1918, in allreduce_gradients
+    self.optimizer.overlapping_partition_gradients_reduce_epilogue()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 859, in overlapping_partition_gradients_reduce_epilogue
+    self.independent_gradient_partition_epilogue()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 750, in independent_gradient_partition_epilogue
+    self.reduce_ipg_grads()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1399, in reduce_ipg_grads
+    self.copy_grads_in_partition(param)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1320, in copy_grads_in_partition
+    self.async_accumulate_grad_in_cpu_via_gpu(param)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1221, in async_accumulate_grad_in_cpu_via_gpu
+    accumulate_gradients()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/deepspeed/runtime/zero/stage_1_and_2.py", line 1198, in accumulate_gradients
+    dest_buffer.copy_(self.accumulated_grads_in_cpu[param_id].view(-1), non_blocking=True)
+KeyboardInterrupt

@@ -1,0 +1,62 @@
+
+
+  0%|          | 1/41040 [01:04<732:49:10, 64.28s/it]
+
+
+
+
+  0%|          | 5/41040 [04:28<600:14:59, 52.66s/it]
+
+
+
+
+  0%|          | 9/41040 [07:58<598:11:59, 52.49s/it]
+
+  0%|          | 10/41040 [08:50<599:25:55, 52.59s/it]
+
+
+
+
+
+
+
+
+
+
+
+
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 180, in <module>
+    trainer.train()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2193, in _inner_training_loop
+    self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2577, in _maybe_log_save_evaluate
+    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3365, in evaluate
+    output = eval_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3580, in evaluation_loop
+    preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 140, in nested_concat
+    return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 105, in torch_pad_and_concatenate
+    result = tensor1.new_full(new_shape, padding_index)
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 10.71 GiB (GPU 0; 39.39 GiB total capacity; 25.30 GiB already allocated; 10.57 GiB free; 27.26 GiB reserved in total by PyTorch) If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF
+Traceback (most recent call last):
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 180, in <module>
+    trainer.train()
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2193, in _inner_training_loop
+    self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2577, in _maybe_log_save_evaluate
+    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3365, in evaluate
+    output = eval_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3580, in evaluation_loop
+    preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 140, in nested_concat
+    return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 105, in torch_pad_and_concatenate
+    result = tensor1.new_full(new_shape, padding_index)
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 10.71 GiB (GPU 0; 39.39 GiB total capacity; 25.30 GiB already allocated; 10.57 GiB free; 27.26 GiB reserved in total by PyTorch) If reserved memory is >> allocated memory try setting max_split_size_mb to avoid fragmentation.  See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF

@@ -1,0 +1,19 @@
+
+ 20%|██        | 1/5 [00:54<03:37, 54.46s/it]
+100%|██████████| 2/2 [00:00<00:00, 10.18it/s]
+
+{'loss': 3.0322, 'learning_rate': 2e-05, 'epoch': 1.0}
+
+ 40%|████      | 2/5 [01:46<02:35, 51.99s/it]
+
+
+ 60%|██████    | 3/5 [02:15<01:23, 41.65s/it]
+
+
+ 80%|████████  | 4/5 [03:11<00:47, 47.22s/it]
+100%|██████████| 5/5 [03:23<00:00, 35.18s/it]
+  0%|          | 0/2 [00:00<?, ?it/s]
+
+{'loss': 1.1643, 'grad_norm': 98.26777648925781, 'learning_rate': 0.0, 'epoch': 3.0}
+{'eval_loss': 2.531498432159424, 'eval_accuracy': 0.96, 'eval_runtime': 1.4512, 'eval_samples_per_second': 27.564, 'eval_steps_per_second': 1.378, 'epoch': 3.0}
+{'train_runtime': 228.6352, 'train_samples_per_second': 7.873, 'train_steps_per_second': 0.022, 'train_loss': 1.5378968715667725, 'epoch': 3.0}

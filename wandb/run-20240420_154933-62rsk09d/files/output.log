@@ -1,0 +1,91 @@
+
+  0%|          | 1/869 [01:39<23:56:28, 99.30s/it]
+  2%|▏         | 4/188 [00:00<00:16, 11.13it/s]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+100%|██████████| 188/188 [01:20<00:00,  1.25it/s]
+
+  0%|          | 2/869 [04:38<35:14:52, 146.36s/it]
+
+
+
+
+
+
+
+
+
+
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 217, in <module>
+    trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2193, in _inner_training_loop
+    self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2577, in _maybe_log_save_evaluate
+    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3365, in evaluate
+    output = eval_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3580, in evaluation_loop
+    preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 140, in nested_concat
+    return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 105, in torch_pad_and_concatenate
+    result = tensor1.new_full(new_shape, padding_index)
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 18.27 GiB. GPU 0 has a total capacity of 79.15 GiB of which 18.26 GiB is free. Including non-PyTorch memory, this process has 60.88 GiB memory in use. Of the allocated memory 35.21 GiB is allocated by PyTorch, and 24.60 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Traceback (most recent call last):
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/run.py", line 217, in <module>
+    trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 1780, in train
+    return inner_training_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2193, in _inner_training_loop
+    self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 2577, in _maybe_log_save_evaluate
+    metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3365, in evaluate
+    output = eval_loop(
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer.py", line 3580, in evaluation_loop
+    preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 140, in nested_concat
+    return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
+  File "/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/transformers/trainer_pt_utils.py", line 105, in torch_pad_and_concatenate
+    result = tensor1.new_full(new_shape, padding_index)
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 18.27 GiB. GPU 0 has a total capacity of 79.15 GiB of which 18.26 GiB is free. Including non-PyTorch memory, this process has 60.88 GiB memory in use. Of the allocated memory 35.21 GiB is allocated by PyTorch, and 24.60 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

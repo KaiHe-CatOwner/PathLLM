@@ -1,4 +1,9 @@
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
+import ast
+import random
+import pandas as pd
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
 from utils.utils import my_compute_metrics,seed_everything
@@ -6,9 +11,8 @@ from typing import Optional
 from dataclasses import dataclass, field
 from model.my_model import MyCustomModel
 from peft import LoraConfig
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets
 from utils.data_collator import MyDataCollatorForLanguageModeling
-
 
 @dataclass
 class ScriptArguments:
@@ -25,12 +29,12 @@ class ScriptArguments:
     seed: Optional[int] = field(default=42, metadata={"help": "seed"})
 
     # model
-    llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name，  meta-llama/Llama-2-7b-chat-hf "})
-    clip_name: Optional[str] = field(default="uni", metadata={"help": "the model name，  conch / pathclip-base / uni"})
+    llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B, meta-llama/Llama-2-7b-chat-hf "})
+    clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base / uni"})
     
     # data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
-    dataset_name: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": " CNX-PathLLM/TextbookPath / CNX-PathLLM/PVQAClean /  stingning/ultrachat "})
+    dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/PVQAClean", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap"})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     
     # log and save model
@@ -38,7 +42,7 @@ class ScriptArguments:
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=5, metadata={"help": "the number of logging steps"})
     max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
-    save_steps: Optional[int] = field(default=200, metadata={"help": "Number of updates steps before two checkpoint saves"})
+    save_steps: Optional[int] = field(default=50, metadata={"help": "Number of updates steps before two checkpoint saves"})
     save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -50,13 +54,11 @@ class ScriptArguments:
     eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
-    num_train_epochs: Optional[int] = field(default=50, metadata={"help": "the number of training epochs"})
+    num_train_epochs: Optional[int] = field(default=1, metadata={"help": "the number of training epochs"})
         
     # eval
     evaluation_strategy: Optional[str] = field(default="steps", metadata={"help": "epoch, step"})
-    eval_steps: Optional[int] = field(default=1, metadata={"help": "eval_steps"})
-    
-
+    eval_steps: Optional[int] = field(default=100000, metadata={"help": "eval_steps"})
 
     # unused
     push_to_hub: Optional[bool] = field(default=False, metadata={"help": "Push the model to HF Hub"})
@@ -73,26 +75,54 @@ seed_everything(script_args.seed)
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 
-
-
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<|Text|>',  '<|Image|>']  # 你要添加的特殊字符列表
+new_tokens = ['<|Question|>',  '<|Answer|>', '<Image>']  # 你要添加的特殊字符列表
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
 
+questions = pd.read_csv('./utils/question_list.csv', header=None)  # 假设CSV文件没有头部信息
+questions = questions[0].tolist()
 
-def formatting_func(examples):
+
+def formatting_func_itp(examples):
+    question = random.choice(questions)
+    answer = examples["txt"]
+    text = f"<|Question|> {question}{tokenizer.eos_token} " + f"<|Answer|> {answer}{tokenizer.eos_token}\n"
+    examples["text"] = text
+    return examples
+
+def formatting_func_vqap(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<|Text|> {question}{tokenizer.eos_token} " + f"{answer}{tokenizer.eos_token}\n"
+    if answer in ["yes","no"]:
+        question += "Answer yes or no only!"
+    question = question.replace("<image>\n", "")
+    question = question.replace("<image>", "")
+    text = f"<|Question|> {question}{tokenizer.eos_token}" + f"<|Answer|> {answer}{tokenizer.eos_token}\n"
     examples["text"] = text
-    # examples["image"] = examples["image"]
+    return examples
+
+# CNX-PathLLM/MultiConversation
+# [{'from': 'human', 'value': 'What are the key features of this image that suggest chronic pancreatitis?'},
+# {'from': 'gpt', 'value': 'The presence of duct dilatation, fibrosis, and pancreatic tissue necrosis are indicative of chronic pancreatitis.}]
+def formatting_func_vmc(examples): # image conversations
+    conversation = examples["conversations"]
+    conversation = ast.literal_eval(conversation)
+    text = ""
+    for sentence in conversation:
+        sentence['value'] = sentence['value'].replace("<image>\n", "")
+        sentence['value'] = sentence['value'].replace("<image>", "")
+        if sentence['from'] == 'human':
+            text += f"<|Question|> {sentence['value']}{tokenizer.eos_token}"
+        elif sentence['from'] == 'gpt':
+            text += f"<|Answer|> {sentence['value']}{tokenizer.eos_token}"
+    examples["text"] = text
     return examples
 
 if script_args.select_data_num>0:
@@ -101,13 +131,27 @@ else:
     split_text = "train"
     
 
+dataset = []
+eval_dataset = None
 
+for dataset_name in script_args.dataset_name_list.split(","):
+    one_dataset = load_dataset(dataset_name, split=split_text, cache_dir="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache")
+    if dataset_name in ["CNX-PathLLM/PVQAClean"]:
+        one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
+        one_dataset = one_dataset.train_test_split(test_size=0.1)
+        eval_dataset = one_dataset['test']
+        one_dataset = one_dataset['train']
+    elif dataset_name in ["CNX-PathLLM/Pathinstruct"]:
+        one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
+    elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
+        one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
+    else:
+        one_dataset = one_dataset.rename_column('jpg', 'image')
+        one_dataset = one_dataset.map(formatting_func_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
+    dataset.append(one_dataset)
 
-dataset = load_dataset(script_args.dataset_name, split=split_text, cache_dir="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache")
-dataset = dataset.train_test_split(test_size=0.1)
-dataset = dataset.map(formatting_func, num_proc=4, remove_columns=["question", "answer"])
-train_dataset = dataset["train"]
-eval_dataset = dataset["test"]
+dataset = concatenate_datasets(dataset)
+train_dataset = dataset
 
 model = MyCustomModel(script_args.llm_requires_grad, 
                       script_args.clip_name, 
@@ -119,6 +163,7 @@ model = MyCustomModel(script_args.llm_requires_grad,
                       tokenizer,
                       new_tokens_ids[-1])
 
+print("output dir is set to: {}".format(script_args.output_dir))
 
 training_args = TrainingArguments(
     output_dir=script_args.output_dir,
@@ -159,19 +204,15 @@ trainer = CustomTrainer(
     model=model,
     args=training_args,
     max_seq_length=script_args.max_seq_length,
-    train_dataset=dataset["train"],
-    eval_dataset=dataset["test"],
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
     dataset_text_field=script_args.dataset_text_field,
     peft_config=peft_config,
     tokenizer=tokenizer,
     data_collator=data_collator,
-    compute_metrics=my_compute_metrics
+    compute_metrics=my_compute_metrics,
 )
 
 
-# trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)
-trainer.train()
-
-
-
-
+trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)
+# trainer.train()

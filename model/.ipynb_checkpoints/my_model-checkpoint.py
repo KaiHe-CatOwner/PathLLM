@@ -145,8 +145,10 @@ class MyCustomModel(nn.Module):
     def get_fusion_embedding(self, input_ids, image):
         token_embs = self.embedding_layer(input_ids)
         if self.clip_name == 'uni':
-            image_embs = self.vision_encoder(image) # no proj_contrast=False for clip
-        else:
+            image_embs = self.vision_encoder(image)
+        elif self.clip_name == 'conch'::
+            image_embs = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+        else: 
             image_embs = self.vision_encoder.encode_image(image, normalize=False) # no proj_contrast=False for clip
         # print(image_embs.shape)
         # image_embs = torch.stack(image_embs, dim=0)

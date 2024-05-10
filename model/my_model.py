@@ -2,15 +2,40 @@
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import transforms
 import timm
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, GenerationConfig
 from accelerate import Accelerator
-import open_clip
 from utils.utils import clip_path_map
 
+class Attn_Net_Gated(nn.Module):
+    def __init__(self, L = 1024, D = 256, dropout = False, heads = 1):
+        super(Attn_Net_Gated, self).__init__()
+        self.attention_a = [
+            nn.Linear(L, D),
+            nn.Tanh()]
+        
+        self.attention_b = [nn.Linear(L, D),
+                            nn.Sigmoid()]
+        if dropout:
+            self.attention_a.append(nn.Dropout(0.25))
+            self.attention_b.append(nn.Dropout(0.25))
 
-class MyCustomModel(nn.Module):
+        self.attention_a = nn.Sequential(*self.attention_a)
+        self.attention_b = nn.Sequential(*self.attention_b)
+        
+        self.attention_c = nn.Linear(D, heads)
+
+    def forward(self, x, mask):
+        a = self.attention_a(x)
+        b = self.attention_b(x)
+        A = a.mul(b)
+        A = self.attention_c(A)  # N x heads
+        A[mask==0] = 1e-9
+        return A
+
+class PPathVLM(nn.Module):
     def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer, image_token_id):
         nn.Module.__init__(self)
 
@@ -145,8 +170,10 @@ class MyCustomModel(nn.Module):
     def get_fusion_embedding(self, input_ids, image):
         token_embs = self.embedding_layer(input_ids)
         if self.clip_name == 'uni':
-            image_embs = self.vision_encoder(image) # no proj_contrast=False for clip
-        else:
+            image_embs = self.vision_encoder(image)
+        elif self.clip_name == 'conch':
+            image_embs = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+        else: 
             image_embs = self.vision_encoder.encode_image(image, normalize=False) # no proj_contrast=False for clip
         # print(image_embs.shape)
         # image_embs = torch.stack(image_embs, dim=0)
@@ -172,4 +199,81 @@ class MyCustomModel(nn.Module):
         labels = self.pad_label_fusion(fusion_embs.size(1), labels)
 
         output = self.llm(inputs_embeds=fusion_embs, attention_mask=attention_mask, labels=labels)
+        return output
+    
+
+class WPathVLM(PPathVLM):
+    def __init__(self, llm_requires_grad, load_in_8bit, load_in_4bit, llm_name, 
+                 trust_remote_code, token, tokenizer, image_token_id,
+                 n_heads=2, n_level=3, embed_dim=512):
+        
+        nn.Module.__init__(self)
+
+        self.llm_tokenizer = tokenizer
+        self.llm = self.load_llm(load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token)
+        self.embedding_layer = self.llm.get_input_embeddings()
+        self.n_heads = n_heads
+        self.n_level = n_level
+        self.embed_dim = embed_dim
+
+        size = [self.embed_dim, int(self.embed_dim/2)]
+
+        # attention could be splitted as level based
+        self.att_net = Attn_Net_Gated(L = size[0], D = size[1], dropout = True, heads = self.n_heads)
+
+        # self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8, batch_first=True)
+        self.resampler_layer = nn.Sequential(
+            nn.LayerNorm(self.embed_dim),
+            nn.Linear(self.embed_dim, self.llm.config.hidden_size, bias=False),
+            nn.ReLU(),
+            nn.Dropout(0.25),
+            )
+        
+        self.config = self.llm.config
+        self.image_token_id = image_token_id
+        self.llm.requires_grad = llm_requires_grad
+
+    def get_wsi_embedding(self, patch_embs, patch_masks, level):
+
+        batch_size, num_patches, embedding_size = patch_embs.shape
+
+        # patch embedding attention part
+        patch_embs_flattened = patch_embs.view(batch_size * num_patches, embedding_size) # shape (bz x np, 512)
+        patch_masks_flattened = patch_masks.view(batch_size * num_patches)
+
+        patch_attention_matrices = self.att_net(patch_embs_flattened, patch_masks_flattened) # shape (bz x np, n_heads)
+        patch_attention_matrices = patch_attention_matrices.view(batch_size, num_patches, self.n_heads) # shape (bz, np, n_heads)
+        patch_attention_matrices = F.softmax(patch_attention_matrices, dim=1) # shape (bz, np, n_heads)
+        # aggregated to WSI embedding
+        mapped_patch_embs = patch_embs_flattened.view(batch_size, num_patches, embedding_size) # shape (bz, np, 512)
+        agged_WSI_embs = patch_attention_matrices.unsqueeze(-1) * mapped_patch_embs.unsqueeze(-2)  # shape (bz, np, n_heads, 512)
+        agged_WSI_embs = torch.sum(agged_WSI_embs, dim=1) # (bz, n_heads, 512)
+        agged_WSI_embs = self.resampler_layer(agged_WSI_embs) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+
+        return agged_WSI_embs
+
+    def get_fusion_embedding(self, input_ids, agged_WSI_embs):
+        token_embs = self.embedding_layer(input_ids)
+        image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(agged_WSI_embs[0].device))
+        batch_image_token_emb = image_token_emb.repeat(agged_WSI_embs[0].size(0), 1, 1)
+        agged_WSI_embs = torch.cat(agged_WSI_embs, dim=1)
+        fusion_embs =  torch.cat((batch_image_token_emb, agged_WSI_embs, token_embs), dim=1)
+        return fusion_embs
+
+    def forward(self, *args, **kwargs):
+        input_ids = kwargs["input_ids"] # ids for text
+        text_attention_mask = kwargs["attention_mask"]
+        labels = kwargs["labels"]
+        agged_WSI_embs = []
+        
+        for level in self.n_level:
+            patch_embs = kwargs["fea{}".format(level+1)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
+            patch_attention_mask = kwargs["mask{}".format(level+1)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
+            agged_WSI_embs.append(self.get_wsi_embedding(patch_embs, patch_attention_mask, level))
+        
+        fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
+        text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
+        labels = self.pad_label_fusion(fusion_embs.size(1), labels)
+
+        output = self.llm(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, labels=labels)
         return output

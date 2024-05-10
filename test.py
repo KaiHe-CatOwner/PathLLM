@@ -12,12 +12,13 @@ from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
 from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
+from rouge import Rouge
 from dataclasses import dataclass, field
 from model.my_model import MyCustomModel
 from peft import LoraConfig
 from datasets import load_dataset, concatenate_datasets
 from utils.data_collator import MyDataCollatorForLanguageModelingTest
-from utils.eval_utils import calculate_f1score 
+from utils.eval_utils import calculate_f1score, compute_bleu_scores
 
 
 @dataclass
@@ -127,6 +128,11 @@ close_ques_acc = 0
 close_ques_num = 0
 open_ques_f1 = []
 
+open_candidate = []
+open_reference = []
+close_candidate = []
+close_reference = []
+
 for batch in tqdm(eval_dataloader):
     input_ids = batch['input_ids'].to(device)
     attention_masks = batch['attention_mask'].to(device)
@@ -139,18 +145,33 @@ for batch in tqdm(eval_dataloader):
                          attention_mask=attention_masks,
                          labels=labels,
                          image=images)
-    
-    for i in range(len(res)):
+    for i in range(len(answers)):
         if answers[i] in ['yes','no']:
-            close_ques_num += 1
-            if answers[i] in res[i]:
-                close_ques_acc += 1
+            close_candidate.append(res[i])
+            close_reference.append(answers[i])
         else:
-            f1_score = calculate_f1score(res[i], answers[i])
-            open_ques_f1.append(f1_score)
+            open_candidate.append(res[i])
+            open_reference.append(answers[i])
+            
+rouge = Rouge()
+
+# calculate accuracy for yes or no problem
+for i in range(len(close_reference)):
+    close_ques_num += 1
+    if close_reference[i] in close_candidate[i]:
+        close_ques_acc += 1
+        
+# calculate f1 score for open ended problem
+for i in range(len(open_reference)):
+    f1_score = calculate_f1score(open_candidate[i], open_reference[i])
+    open_ques_f1.append(f1_score)
     
+open_ques_rouge = rouge.get_scores(open_candidate, open_reference, avg=True)
+open_bleu_score = compute_bleu_scores(open_candidate, open_reference, avg=True)
 open_ques_f1 = np.mean(open_ques_f1)
 close_ques_acc = close_ques_acc/close_ques_num
 
 print("open question macro f1_score: {}".format(open_ques_f1))
+print("open question rouge score: {}".format(open_ques_rouge))
+print("open question bleu score: {}".format(open_bleu_score))
 print("close question accuray: {}".format(close_ques_acc))

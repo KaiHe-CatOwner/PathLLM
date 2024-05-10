@@ -9,10 +9,10 @@ from utils.my_trainer import CustomTrainer
 from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
-from model.my_model import MyCustomModel
+from model.my_model import PPathVLM, WPathVLM
 from peft import LoraConfig
 from datasets import load_dataset, concatenate_datasets
-from utils.data_collator import MyDataCollatorForLanguageModeling
+from utils.data_collator import MyDataCollatorForPPathVLM, MyDataCollatorForWPathVLM
 
 @dataclass
 class ScriptArguments:
@@ -34,7 +34,8 @@ class ScriptArguments:
     
     # data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
-    dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/PVQAClean", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap"})
+    dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/TextbookQAPair", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap,CNX-PathLLM/TextbookQAPair,CNX-PathLLM/PVQAClean"})
+    # dataset_name_list: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": "CNX-PathLLM/PVQAClean"})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     
     # log and save model
@@ -43,7 +44,7 @@ class ScriptArguments:
     logging_steps: Optional[int] = field(default=5, metadata={"help": "the number of logging steps"})
     max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
     save_steps: Optional[int] = field(default=50, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
+    save_total_limit: Optional[int] = field(default=5, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -81,14 +82,13 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<|Question|>',  '<|Answer|>', '<Image>']  # 你要添加的特殊字符列表
+new_tokens = ['<|Question|>',  '<|Answer|>', '<Image>']  
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
 
-questions = pd.read_csv('./utils/question_list.csv', header=None)  # 假设CSV文件没有头部信息
+questions = pd.read_csv('./utils/question_list.csv', header=None)  
 questions = questions[0].tolist()
-
 
 def formatting_func_itp(examples):
     question = random.choice(questions)
@@ -143,6 +143,11 @@ for dataset_name in script_args.dataset_name_list.split(","):
         one_dataset = one_dataset['train']
     elif dataset_name in ["CNX-PathLLM/Pathinstruct"]:
         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
+    elif dataset_name in ["CNX-PathLLM/TextbookQAPair"]:
+        one_dataset = one_dataset.filter(lambda x: x is not None, num_proc=20)
+        for key in one_dataset.features.keys():
+            one_dataset = one_dataset.filter(lambda x: x[key] is not None, num_proc=20)
+        one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
     elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
         one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
     else:
@@ -153,15 +158,15 @@ for dataset_name in script_args.dataset_name_list.split(","):
 dataset = concatenate_datasets(dataset)
 train_dataset = dataset
 
-model = MyCustomModel(script_args.llm_requires_grad, 
-                      script_args.clip_name, 
-                      script_args.load_in_8bit, 
-                      script_args.load_in_4bit, 
-                      script_args.llm_name, 
-                      script_args.trust_remote_code, 
-                      script_args.token, 
-                      tokenizer,
-                      new_tokens_ids[-1])
+model = PPathVLM(script_args.llm_requires_grad, 
+                script_args.clip_name, 
+                script_args.load_in_8bit, 
+                script_args.load_in_4bit, 
+                script_args.llm_name, 
+                script_args.trust_remote_code, 
+                script_args.token, 
+                tokenizer,
+                new_tokens_ids[-1])
 
 print("output dir is set to: {}".format(script_args.output_dir))
 
@@ -199,7 +204,7 @@ else:
     peft_config = None
 
 
-data_collator = MyDataCollatorForLanguageModeling(tokenizer, model.image_processor)
+data_collator = MyDataCollatorForPPathVLM(tokenizer, model.image_processor)
 trainer = CustomTrainer(
     model=model,
     args=training_args,
@@ -215,4 +220,3 @@ trainer = CustomTrainer(
 
 
 trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)
-# trainer.train()

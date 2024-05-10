@@ -1,6 +1,43 @@
 from collections import defaultdict
 import re
 import math
+from rouge import Rouge 
+import numpy as np
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+
+def compute_bleu_scores(candidate_list, reference_list, avg=False):
+    bleu_scores = []
+    smoothie = SmoothingFunction().method1
+    
+    for candidate, references in zip(candidate_list, reference_list):
+        candidate_tokens = candidate.split()
+        reference_tokens = [reference.split() for reference in references]
+        
+        # Determine the maximum order of n-grams we can consider
+        min_length = min(len(reference) for reference in reference_tokens)
+        if min_length > 4:
+            weights = (0.25, 0.25, 0.25, 0.25)  # Use 3-gram if reference sentences are long enough
+        else:
+            # Adjust weights based on the minimum length of the reference sentences
+            weights = tuple(1/min_length for _ in range(min_length)) + tuple(0 for _ in range(4 - min_length))
+        
+        # Calculate BLEU score with dynamic weights
+        bleu = sentence_bleu(reference_tokens, candidate_tokens, weights=weights, smoothing_function=smoothie)
+        bleu_scores.append(bleu)
+    
+    if avg:
+        return np.mean(bleu_scores)
+    else:
+        return bleu_scores
+
+
+def calculate_rouge(candidate, reference):
+    rouge = Rouge()
+    '''
+    candidate, reference: generated and ground-truth sentences
+    '''
+    scores = rouge.get_scores([candidate], reference)
+    return scores
 
 def brevity_penalty(candidate, references):
     c = len(candidate)

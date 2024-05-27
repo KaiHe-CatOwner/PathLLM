@@ -1,56 +1,0 @@
-GCCcore/11.3.0
-zlib/1.2.12-GCCcore-11.3.0
-binutils/2.38-GCCcore-11.3.0
-bzip2/1.0.8-GCCcore-11.3.0
-zlib/1.2.12-GCCcore-11.3.0
-ncurses/6.3-GCCcore-11.3.0
-libreadline/8.1.2-GCCcore-11.3.0
-ncurses/6.3-GCCcore-11.3.0
-Tcl/8.6.12-GCCcore-11.3.0
-SQLite/3.38.3-GCCcore-11.3.0
-XZ/5.2.5-GCCcore-11.3.0
-GMP/6.2.1-GCCcore-11.3.0
-libffi/3.4.2-GCCcore-11.3.0
-OpenSSL/1.1
-Python/3.10.4-GCCcore-11.3.0
-CUDA/11.8.0
-cuDNN/8.7.0.84-CUDA-11.8.0
-[2024-04-20 17:11:52,177] torch.distributed.run: [WARNING] 
-[2024-04-20 17:11:52,177] torch.distributed.run: [WARNING] *****************************************
-[2024-04-20 17:11:52,177] torch.distributed.run: [WARNING] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-[2024-04-20 17:11:52,177] torch.distributed.run: [WARNING] *****************************************
-Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
-Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
-Repo card metadata block was not found. Setting CardData to empty.
-Repo card metadata block was not found. Setting CardData to empty.
-Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:13<00:41, 13.98s/it]Loading checkpoint shards:  25%|██▌       | 1/4 [00:14<00:42, 14.07s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:29<00:29, 14.98s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:29<00:30, 15.02s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:44<00:15, 15.12s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:45<00:15, 15.14s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:47<00:00, 10.29s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:47<00:00, 11.97s/it]
-Loading checkpoint shards: 100%|██████████| 4/4 [00:47<00:00, 10.32s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:47<00:00, 11.98s/it]
-/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/utils/my_trainer.py:352: UserWarning: You passed `remove_unused_columns=False` on a non-packed dataset. This might create some issues with the default collator and yield to errors. If you want to inspect dataset other columns (in this case ['image', 'text']), you can subclass `DataCollatorForLanguageModeling` in case you used the default collator and create your own data collator in order to inspect the unused dataset columns.
-  warnings.warn(
-/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/utils/my_trainer.py:352: UserWarning: You passed `remove_unused_columns=False` on a non-packed dataset. This might create some issues with the default collator and yield to errors. If you want to inspect dataset other columns (in this case ['text', 'image']), you can subclass `DataCollatorForLanguageModeling` in case you used the default collator and create your own data collator in order to inspect the unused dataset columns.
-  warnings.warn(
-/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py:436: FutureWarning: Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: dict_keys(['dispatch_batches', 'split_batches', 'even_batches', 'use_seedable_sampler']). Please pass an `accelerate.DataLoaderConfiguration` instead: 
-dataloader_config = DataLoaderConfiguration(dispatch_batches=None, split_batches=False, even_batches=True, use_seedable_sampler=True)
-  warnings.warn(
-WARNING:accelerate.utils.other:Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
-/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py:436: FutureWarning: Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: dict_keys(['dispatch_batches', 'split_batches', 'even_batches', 'use_seedable_sampler']). Please pass an `accelerate.DataLoaderConfiguration` instead: 
-dataloader_config = DataLoaderConfiguration(dispatch_batches=None, split_batches=False, even_batches=True, use_seedable_sampler=True)
-  warnings.warn(
-Using /bask/homes/a/asiw9691/.cache/torch_extensions/py310_cu118 as PyTorch extensions root...
-Using /bask/homes/a/asiw9691/.cache/torch_extensions/py310_cu118 as PyTorch extensions root...
-Detected CUDA files, patching ldflags
-Emitting ninja build file /bask/homes/a/asiw9691/.cache/torch_extensions/py310_cu118/cpu_adam/build.ninja...
-Building extension module cpu_adam...
-Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
-Loading extension module cpu_adam...
-Loading extension module cpu_adam...
-wandb: Currently logged in as: betpotti (pathlmm). Use `wandb login --relogin` to force relogin
-wandb: wandb version 0.16.6 is available!  To upgrade, please run:
-wandb:  $ pip install wandb --upgrade
-wandb: Tracking run with wandb version 0.13.10
-wandb: Run data is saved locally in /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240420_171505-99fuuw63
-wandb: Run `wandb offline` to turn off syncing.
-wandb: Syncing run pretty-rain-66
-wandb: ⭐️ View project at https://wandb.ai/pathlmm/huggingface
-wandb: 🚀 View run at https://wandb.ai/pathlmm/huggingface/runs/99fuuw63
-  0%|          | 0/86900000 [00:00<?, ?it/s]slurmstepd: error: *** JOB 682070 ON bask-pg0309u33a CANCELLED AT 2024-04-20T17:15:51 ***

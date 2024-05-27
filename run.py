@@ -37,6 +37,7 @@ class ScriptArguments:
     dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/TextbookQAPair", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap,CNX-PathLLM/TextbookQAPair,CNX-PathLLM/PVQAClean"})
     # dataset_name_list: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": "CNX-PathLLM/PVQAClean"})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
+    data_cache_dir: Optional[str] = field(default="~/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
     
     # log and save model
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
@@ -135,7 +136,7 @@ dataset = []
 eval_dataset = None
 
 for dataset_name in script_args.dataset_name_list.split(","):
-    one_dataset = load_dataset(dataset_name, split=split_text, cache_dir="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache")
+    one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     if dataset_name in ["CNX-PathLLM/PVQAClean"]:
         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
         one_dataset = one_dataset.train_test_split(test_size=0.1)
@@ -144,9 +145,9 @@ for dataset_name in script_args.dataset_name_list.split(","):
     elif dataset_name in ["CNX-PathLLM/Pathinstruct"]:
         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
     elif dataset_name in ["CNX-PathLLM/TextbookQAPair"]:
-        one_dataset = one_dataset.filter(lambda x: x is not None, num_proc=20)
-        for key in one_dataset.features.keys():
-            one_dataset = one_dataset.filter(lambda x: x[key] is not None, num_proc=20)
+        # one_dataset = one_dataset.filter(lambda x: x is not None, num_proc=20)
+        # for key in one_dataset.features.keys():
+        #     one_dataset = one_dataset.filter(lambda x: x[key] is not None, num_proc=20)
         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
     elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
         one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
@@ -166,7 +167,8 @@ model = PPathVLM(script_args.llm_requires_grad,
                 script_args.trust_remote_code, 
                 script_args.token, 
                 tokenizer,
-                new_tokens_ids[-1])
+                new_tokens_ids[-1],
+                script_args.data_cache_dir)
 
 print("output dir is set to: {}".format(script_args.output_dir))
 

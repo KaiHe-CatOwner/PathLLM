@@ -11,7 +11,7 @@ from typing import Optional
 from dataclasses import dataclass, field
 from model.my_model import PPathVLM, WPathVLM
 from peft import LoraConfig
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, concatenate_datasets, load_from_disk
 from utils.data_collator import MyDataCollatorForWPathVLM
 
 @dataclass
@@ -29,15 +29,16 @@ class ScriptArguments:
     seed: Optional[int] = field(default=42, metadata={"help": "seed"})
 
     # model
-    llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B, meta-llama/Llama-2-7b-chat-hf "})
+    llm_name: Optional[str] = field(default="meta-llama/Meta-Llama-3-8B", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B, meta-llama/Llama-2-7b-chat-hf "})
     
     # data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
-    dataset_local_dir: Optional[str] = field(default="/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_test")
-    # dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/TextbookQAPair", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap,CNX-PathLLM/TextbookQAPair,CNX-PathLLM/PVQAClean"})
-    # dataset_name_list: Optional[str] = field(default="CNX-PathLLM/PVQAClean", metadata={"help": "CNX-PathLLM/PVQAClean"})
+    dataset_name_list: Optional[str] = field(default="CNX-PathLLM/TCGA-WSI-Text")
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
-    
+    data_cache_dir: Optional[str] = field(default="~/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
+    data_local_dir: Optional[str] = field(default=None, metadata={"help": "if not None, load from local"})
+    eval_fold_index: Optional[int] = field(default=9, metadata={"help": "the test fold index"})
+
     # log and save model
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
@@ -55,7 +56,7 @@ class ScriptArguments:
     eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
-    num_train_epochs: Optional[int] = field(default=1, metadata={"help": "the number of training epochs"})
+    num_train_epochs: Optional[int] = field(default=5, metadata={"help": "the number of training epochs"})
 
     # WSI hyperparam
     n_heads: Optional[int] = field(default=2, metadata={"help": "the number of attention heads for WSI aggregation"})
@@ -87,26 +88,55 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<|Question|>',  '<|Answer|>', '<Image>']  
+new_tokens = ['<|Question|>',  '<|Answer|>', '<Describe>', '<Image>']  
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
 
-questions = pd.read_csv('./utils/question_wsi_list.csv', header=None)  
-questions = questions[0].tolist()
+# questions = pd.read_csv('./utils/question_wsi_list.csv', header=None)  
+# questions = questions[0].tolist()
 
 def formatting_func(examples):
-    question = random.choice(questions)
+    # question = random.choice(questions)
     answer = examples["label"]
-    text = f"<|Question|> {question}{tokenizer.eos_token} " + f"<|Answer|> {answer}{tokenizer.eos_token}\n"
+    text = f"<|Describe|> {answer}{tokenizer.eos_token}\n"
     examples["text"] = text
     return examples
 
-dataset = Dataset.load_from_disk(script_args.dataset_local_dir)
-dataset = dataset.map(formatting_func, num_proc=20, remove_columns=['label'])
-dataset = dataset.train_test_split(test_size=0.05)
-eval_dataset = dataset['test']
-train_dataset = dataset['train']
+if script_args.select_data_num>0:
+    split_text = "train[:{}]".format(script_args.select_data_num)
+else:
+    split_text = "train"
+
+
+if script_args.data_local_dir is None:
+    dataset = []
+
+    for dataset_name in script_args.dataset_name_list.split(","):
+        one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
+        dataset.append(one_dataset)
+
+    dataset = concatenate_datasets(dataset)
+    dataset = dataset.map(formatting_func, num_proc=20, remove_columns=['label', 'slide_id', 'project'])
+    dataset = dataset.train_test_split(test_size=0.05)
+    eval_dataset = dataset['test']
+    train_dataset = dataset['train']
+else:
+    dataset = load_from_disk(script_args.data_local_dir)
+    dataset = dataset.map(formatting_func, num_proc=20, remove_columns=['label', 'slide_id', 'project'])
+    train_folds = [dataset[f'fold_{i}'] for i in range(10) if i != script_args.eval_fold_index]
+    train_dataset = concatenate_datasets(train_folds)
+    eval_dataset = dataset['fold_{}'.format(script_args.eval_fold_index)]
+
+# df_indices = pd.read_csv(script_args.dataset_split)
+
+# train_indices = df_indices[df_indices['fold'] != (script_args.test_split_fold-1)]['index'].tolist()
+# test_indices = df_indices[df_indices['fold'] == (script_args.test_split_fold-1)]['index'].tolist()
+
+# train_dataset = dataset.select(train_indices)
+# eval_dataset = dataset.select(test_indices)
+print(train_dataset)
+print(eval_dataset)
 
 model = WPathVLM(script_args.llm_requires_grad, 
                 script_args.load_in_8bit, 
@@ -119,6 +149,7 @@ model = WPathVLM(script_args.llm_requires_grad,
                 n_heads = script_args.n_heads, 
                 n_level = script_args.n_level, 
                 embed_dim = script_args.embed_dim,
+                data_cache_dir = script_args.data_cache_dir,
                 )
 
 print("output dir is set to: {}".format(script_args.output_dir))
@@ -157,7 +188,7 @@ else:
     peft_config = None
 
 
-data_collator = MyDataCollatorForWPathVLM(tokenizer, fea_dim=script_args.embed_dim, n_level=script_args.n_level)
+data_collator = MyDataCollatorForWPathVLM(tokenizer=tokenizer, fea_dim=script_args.embed_dim, n_level=script_args.n_level)
 
 trainer = CustomTrainer(
     model=model,
@@ -171,6 +202,5 @@ trainer = CustomTrainer(
     data_collator=data_collator,
     compute_metrics=my_compute_metrics,
 )
-
 
 trainer.train(resume_from_checkpoint=script_args.resume_from_checkpoint)

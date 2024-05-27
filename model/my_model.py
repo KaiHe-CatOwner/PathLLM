@@ -36,7 +36,7 @@ class Attn_Net_Gated(nn.Module):
         return A
 
 class PPathVLM(nn.Module):
-    def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer, image_token_id):
+    def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer, image_token_id, data_cache_dir):
         nn.Module.__init__(self)
 
         self.clip_name = clip_name
@@ -54,6 +54,7 @@ class PPathVLM(nn.Module):
         self.image_token_id = image_token_id
         self.vision_encoder.requires_grad = False
         self.llm.requires_grad = llm_requires_grad
+        self.data_cache_dir = data_cache_dir
 
 
     def load_vision_encoder(self):
@@ -139,7 +140,7 @@ class PPathVLM(nn.Module):
                     torch_dtype=torch_dtype,
                     token=token,
                     use_cache= True,
-                    cache_dir = "/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"
+                    cache_dir = self.data_cache_dir,
                 )
         llm.resize_token_embeddings(len(self.llm_tokenizer))
         return llm
@@ -205,11 +206,12 @@ class PPathVLM(nn.Module):
 class WPathVLM(PPathVLM):
     def __init__(self, llm_requires_grad, load_in_8bit, load_in_4bit, llm_name, 
                  trust_remote_code, token, tokenizer, image_token_id,
-                 n_heads=2, n_level=3, embed_dim=512):
+                 n_heads=2, n_level=3, embed_dim=512, data_cache_dir = '~/.cache'):
         
         nn.Module.__init__(self)
 
         self.llm_tokenizer = tokenizer
+        self.data_cache_dir = data_cache_dir
         self.llm = self.load_llm(load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token)
         self.embedding_layer = self.llm.get_input_embeddings()
         self.n_heads = n_heads
@@ -260,13 +262,46 @@ class WPathVLM(PPathVLM):
         fusion_embs =  torch.cat((batch_image_token_emb, agged_WSI_embs, token_embs), dim=1)
         return fusion_embs
 
+    
+    def generate(self, *args, **kwargs):
+        generation_config = GenerationConfig(
+                max_length=500,
+                temperature=1.0,
+                top_k=50,
+                top_p=0.95,
+                num_return_sequences=1,
+                repetition_penalty=1.1,
+                do_sample=True,
+                pad_token_id=self.llm_tokenizer.eos_token_id,
+                bos_token_id=self.llm_tokenizer.bos_token_id,
+            )
+        
+        with torch.no_grad():
+            input_ids = kwargs["input_ids"]
+            text_attention_mask = kwargs["attention_mask"]
+            agged_WSI_embs = []
+            for level in range(self.n_level):
+                patch_embs = kwargs["fea{}".format(level+1)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
+                patch_attention_mask = kwargs["mask{}".format(level+1)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
+                agged_WSI_embs.append(self.get_wsi_embedding(patch_embs, patch_attention_mask, level))
+            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
+            text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
+
+            res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, generation_config=generation_config)
+
+        generate_list = []
+        for item in res:
+            generation = self.llm_tokenizer.decode(item, skip_special_tokens=True)
+            generate_list.append(generation)
+        return generate_list
+    
     def forward(self, *args, **kwargs):
         input_ids = kwargs["input_ids"] # ids for text
         text_attention_mask = kwargs["attention_mask"]
         labels = kwargs["labels"]
         agged_WSI_embs = []
         
-        for level in self.n_level:
+        for level in range(self.n_level):
             patch_embs = kwargs["fea{}".format(level+1)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
             patch_attention_mask = kwargs["mask{}".format(level+1)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
             agged_WSI_embs.append(self.get_wsi_embedding(patch_embs, patch_attention_mask, level))

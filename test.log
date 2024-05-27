@@ -1,0 +1,57 @@
+nohup: ignoring input
+GCCcore/11.3.0
+zlib/1.2.12-GCCcore-11.3.0
+binutils/2.38-GCCcore-11.3.0
+bzip2/1.0.8-GCCcore-11.3.0
+zlib/1.2.12-GCCcore-11.3.0
+ncurses/6.3-GCCcore-11.3.0
+libreadline/8.1.2-GCCcore-11.3.0
+ncurses/6.3-GCCcore-11.3.0
+Tcl/8.6.12-GCCcore-11.3.0
+SQLite/3.38.3-GCCcore-11.3.0
+XZ/5.2.5-GCCcore-11.3.0
+GMP/6.2.1-GCCcore-11.3.0
+libffi/3.4.2-GCCcore-11.3.0
+OpenSSL/1.1
+Python/3.10.4-GCCcore-11.3.0
+CUDA/11.8.0
+cuDNN/8.7.0.84-CUDA-11.8.0
+[2024-05-11 01:48:59,872] [INFO] [real_accelerator.py:191:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained.
+new_tokens_ids:  [128256, 128257, 128258]
+Dataset({
+    features: ['f1', 'cor1', 'f2', 'cor2', 'f3', 'cor3', 'text'],
+    num_rows: 864
+})
+llm loading ...
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards:  25%|██▌       | 1/4 [00:02<00:08,  2.99s/it]Loading checkpoint shards:  50%|█████     | 2/4 [00:09<00:09,  5.00s/it]Loading checkpoint shards:  75%|███████▌  | 3/4 [00:15<00:05,  5.43s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:16<00:00,  3.86s/it]Loading checkpoint shards: 100%|██████████| 4/4 [00:16<00:00,  4.20s/it]
+output dir is set to: ./output/WSI_Llama3ins_Test
+[2024-05-11 01:49:38,360] [INFO] [real_accelerator.py:191:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-05-11 01:49:38,662] [INFO] [comm.py:637:init_distributed] cdb=None
+[2024-05-11 01:49:38,662] [INFO] [comm.py:668:init_distributed] Initializing TorchBackend in DeepSpeed with backend nccl
+/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/utils/my_trainer.py:352: UserWarning: You passed `remove_unused_columns=False` on a non-packed dataset. This might create some issues with the default collator and yield to errors. If you want to inspect dataset other columns (in this case ['cor3', 'f1', 'cor2', 'cor1', 'f2', 'f3', 'text']), you can subclass `DataCollatorForLanguageModeling` in case you used the default collator and create your own data collator in order to inspect the unused dataset columns.
+  warnings.warn(
+/bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/lib/python3.10/site-packages/accelerate/accelerator.py:436: FutureWarning: Passing the following arguments to `Accelerator` is deprecated and will be removed in version 1.0 of Accelerate: dict_keys(['dispatch_batches', 'split_batches', 'even_batches', 'use_seedable_sampler']). Please pass an `accelerate.DataLoaderConfiguration` instead: 
+dataloader_config = DataLoaderConfiguration(dispatch_batches=None, split_batches=False, even_batches=True, use_seedable_sampler=True)
+  warnings.warn(
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+Using /bask/homes/a/asiw9691/.cache/torch_extensions/py310_cu118 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /bask/homes/a/asiw9691/.cache/torch_extensions/py310_cu118/cpu_adam/build.ninja...
+Building extension module cpu_adam...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+ninja: no work to do.
+Loading extension module cpu_adam...
+Time to load cpu_adam op: 2.866346836090088 seconds
+wandb: Currently logged in as: betpotti (pathlmm). Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.17.0 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.13.10
+wandb: Run data is saved locally in /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/wandb/run-20240511_015021-kg5quux7
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run rose-sky-88
+wandb: ⭐️ View project at https://wandb.ai/pathlmm/huggingface
+wandb: 🚀 View run at https://wandb.ai/pathlmm/huggingface/runs/kg5quux7
+  0%|          | 0/18 [00:00<?, ?it/s]  6%|▌         | 1/18 [01:54<32:29, 114.69s/it]                                               {'loss': 5.9965, 'grad_norm': 214.8375244140625, 'learning_rate': 1e-05, 'epoch': 0.06}
+  6%|▌         | 1/18 [01:54<32:29, 114.69s/it] 11%|█         | 2/18 [03:30<27:35, 103.48s/it] 17%|█▋        | 3/18 [05:08<25:18, 101.22s/it] 22%|██▏       | 4/18 [06:46<23:16, 99.72s/it]  28%|██▊       | 5/18 [08:23<21:23, 98.72s/it]                                              {'loss': 3.6972, 'grad_norm': 28.56664276123047, 'learning_rate': 1.6250000000000002e-05, 'epoch': 0.28}
+ 28%|██▊       | 5/18 [08:23<21:23, 98.72s/it] 33%|███▎      | 6/18 [09:54<19:13, 96.10s/it]

@@ -264,8 +264,8 @@ class MyDataCollatorForWPathVLMTest(DataCollatorMixin):
         ans_list = []
 
         for d in examples:
-            ans_list.append(d["text"])
-            del d["text"]
+            ans_list.append(d["answer"])
+            del d["answer"]
 
         for level in range(self.n_level):
             fea, cor, patch_mask = self.__feature_trans__(examples, "f{}".format(level+1), "cor{}".format(level+1))

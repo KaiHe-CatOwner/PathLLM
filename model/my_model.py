@@ -151,10 +151,10 @@ class PPathVLM(nn.Module):
 
         generated_pad = torch.ones((bz, padd_len), dtype=need_pad_seq.dtype).to(need_pad_seq.device)
 
-        if self.llm_tokenizer.padding_side == "right":
-            paded_seq = torch.cat((need_pad_seq, generated_pad), dim=1)
-        else:
-            paded_seq = torch.cat((generated_pad, need_pad_seq), dim=1)
+        # if self.llm_tokenizer.padding_side == "right":
+        #     paded_seq = torch.cat((need_pad_seq, generated_pad), dim=1)
+        # else:
+        paded_seq = torch.cat((generated_pad, need_pad_seq), dim=1)
 
         return paded_seq
     
@@ -284,7 +284,7 @@ class WPathVLM(PPathVLM):
                 patch_embs = kwargs["fea{}".format(level+1)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
                 patch_attention_mask = kwargs["mask{}".format(level+1)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
                 agged_WSI_embs.append(self.get_wsi_embedding(patch_embs, patch_attention_mask, level))
-            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
+            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs) # wsi token is on the left
             text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
 
             res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, generation_config=generation_config)

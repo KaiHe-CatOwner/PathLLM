@@ -4,7 +4,7 @@
 #SBATCH --gpus-per-task 2
 #SBATCH --tasks-per-node 1
 #SBATCH --nodes 1
-#SBATCH --time 24:0:0
+#SBATCH --time 48:0:0
 #SBATCH --mem 386G
 #SBATCH --constraint=a100_40
 #SBATCH -o ./logs/slurm.%N.%j.out # STDOUT

@@ -88,7 +88,7 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<|Question|>',  '<|Answer|>', '<Describe>', '<Image>']  
+new_tokens = ['<|Question|>',  '<|Answer|>', '<|Describe|>', '<|Image|>']  
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)

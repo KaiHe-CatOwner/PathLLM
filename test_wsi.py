@@ -2,6 +2,7 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 import torch
+import random
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import DataLoader
@@ -47,6 +48,8 @@ class ScriptArguments:
     # Evaluation
     batch_size: Optional[int] = field(default=4, metadata={"help": "Batch size"})
     ckpt_path: Optional[str] = field(default=None, metadata={"help": "Checkpoint path"})
+    shuffle: Optional[bool] = field(default=False, metadata={"help": "shuffle eval_dataloader or not"})
+    eval_sample_size: Optional[int] = field(default=-1, metadata={"help": "-1 indicate evaluating on all"})
 
 device = 'cuda'
 
@@ -102,8 +105,13 @@ else:
     eval_dataset = dataset[f'fold_{script_args.eval_fold_index}']
 
 # Format and tokenize dataset
+if script_args.eval_sample_size > 0:
+    random_indices = random.sample(range(len(eval_dataset)), script_args.eval_sample_size)
+    eval_dataset = eval_dataset.select(random_indices)
+
 eval_dataset = eval_dataset.map(formatting_func, num_proc=20, remove_columns=['label', 'slide_id', 'project'])
-tokenized_dataset = eval_dataset.map(tokenize, batched=False, num_proc=4, batch_size=script_args.batch_size, input_columns=['text'])
+tokenized_dataset = eval_dataset.map(tokenize, batched=False, num_proc=4, remove_columns=['text'], 
+                                     batch_size=script_args.batch_size, input_columns=['text'])
 
 # Load model
 model = WPathVLM(
@@ -125,11 +133,12 @@ model.to(device)
 
 # Prepare data loader
 data_collator = MyDataCollatorForWPathVLMTest(tokenizer=tokenizer, fea_dim=512, n_level=3)
-dataloader_params = {"batch_size": script_args.batch_size, "collate_fn": data_collator}
+dataloader_params = {"batch_size": script_args.batch_size, "collate_fn": data_collator, "shuffle": script_args.shuffle}
 eval_dataloader = DataLoader(tokenized_dataset, **dataloader_params)
 
 # Evaluate the model
 ans_list, res_list = [], []
+
 for batch in tqdm(eval_dataloader):
     input_ids = batch['input_ids'].to(device)
     attention_masks = batch['attention_mask'].to(device)

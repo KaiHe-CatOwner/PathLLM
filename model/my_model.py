@@ -265,7 +265,7 @@ class WPathVLM(PPathVLM):
     
     def generate(self, *args, **kwargs):
         generation_config = GenerationConfig(
-                max_length=500,
+                max_length=200,
                 temperature=1.0,
                 top_k=50,
                 top_p=0.95,

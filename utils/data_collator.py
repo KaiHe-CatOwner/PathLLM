@@ -4,7 +4,7 @@ import torch
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 from collections.abc import Mapping
-from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch, _numpy_collate_batch
+from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch
 import numpy as np
 
 class DataCollatorMixin:
@@ -60,6 +60,40 @@ class MyDataCollatorForPPathVLM(DataCollatorMixin):
             labels[labels == self.tokenizer.pad_token_id] = -100
 
         batch["labels"] = labels
+        batch["image"] = torch.stack(temp_list)
+
+        return batch
+    
+@dataclass
+class MyDataCollatorForQFormerPatch(DataCollatorMixin):
+    image_processor: Any
+    mlm: bool = False
+    mlm_probability: float = 0.15
+    pad_to_multiple_of: Optional[int] = None
+    tf_experimental_compile: bool = False
+    return_tensors: str = "pt"
+
+    def __post_init__(self): 
+        if self.mlm:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
+                "You should pass `mlm=False` to train on causal language modeling instead."
+            )
+
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        
+        temp_list = []
+        text_list = []
+        for d in examples:
+            # print(np.array(d["image"]).shape)
+            temp_list.append(self.image_processor(d["image"]))
+            del d["image"]
+
+        for d in examples:
+            text_list.append(d["text"])
+            del d["text"]
+
+        batch = {"text": text_list}
         batch["image"] = torch.stack(temp_list)
 
         return batch
@@ -336,6 +370,8 @@ class MyDataCollatorForLanguageModelingTest(DataCollatorMixin):
 
         # If special token mask has been preprocessed, pop it from the dict.
         labels = batch["input_ids"].clone()
+
+        # do not apply loss to pad, ques
         if self.tokenizer.pad_token_id is not None:
             labels[labels == self.tokenizer.pad_token_id] = -100
 

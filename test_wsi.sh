@@ -5,7 +5,7 @@
 #SBATCH --tasks-per-node 1
 #SBATCH --nodes 1
 #SBATCH --time 24:0:0
-#SBATCH --mem 386G
+#SBATCH --mem 256G
 #SBATCH --constraint=a100_40
 #SBATCH -o ./logs/slurm.%N.%j.out # STDOUT
 #SBATCH -e ./logs/slurm.%N.%j.err # STDERR
@@ -24,6 +24,6 @@ module load cuDNN/8.7.0.84-CUDA-11.8.0
 source /bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/bin/activate
 
 python test_wsi.py --max_seq_length 256 --batch_size 4 --llm_name meta-llama/Meta-Llama-3-8B-Instruct\
-                    --data_cache_dir /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache\
-                    --n_heads 2 --data_local_dir /bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/TCGA-WSI-Text-Folds\
-                    --ckpt_path /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/output/WSIBase_ConchLlama3_DES/ckpt-250.bin
+                    --shuffle True --data_cache_dir /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache\
+                    --eval_sample_size 100 --n_heads 2 --data_local_dir /bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/TCGA-WSI-Text-Folds\
+                    --ckpt_path /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/output/WSIBase_ConchLlama3_DES/ckpt-700.bin

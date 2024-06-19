@@ -24,7 +24,7 @@ from transformers import (
 from transformers.modeling_utils import unwrap_model
 from transformers.trainer_callback import TrainerCallback
 from transformers.trainer_utils import EvalPrediction
-from transformers.trainer import _is_peft_model
+# from transformers.trainer import _is_peft_model
 from trl.extras.dataset_formatting import get_formatting_func_from_dataset
 from trl.import_utils import is_peft_available
 from trl.trainer.utils import (
@@ -460,10 +460,10 @@ class CustomTrainer(Trainer):
 
         if labels is not None:
             unwrapped_model = unwrap_model(model)
-            if _is_peft_model(unwrapped_model):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
+            # if _is_peft_model(unwrapped_model):
+            #     model_name = unwrapped_model.base_model.model._get_name()
+            # else:
+            #     model_name = unwrapped_model._get_name()
             model_name = unwrapped_model._get_name()
             if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
@@ -480,4 +480,80 @@ class CustomTrainer(Trainer):
 
         return (loss, outputs) if return_outputs else loss
     
-   
+class QformerTrainer(CustomTrainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.logging_loss_scalar = {
+            "total_loss": 0.0,
+            "loss_itc": 0.0,
+            "loss_itm": 0.0,
+            "loss_lm": 0.0,
+        }
+
+    def _prepare_non_packed_dataloader(
+        self,
+        tokenizer,
+        dataset,
+        dataset_text_field,
+        max_seq_length,
+        formatting_func=None,
+        add_special_tokens=True,
+        remove_unused_columns=True,
+    ):
+
+        return dataset
+
+    def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
+        if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
+
+            logs: Dict[str, float] = {}
+
+            # all_gather + mean() to get average loss over all processes
+            tr_loss_scalar = self._nested_gather(tr_loss).mean().item()
+
+            # reset tr_loss to zero
+            tr_loss -= tr_loss
+
+            logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+            if grad_norm is not None:
+                logs["grad_norm"] = grad_norm.detach().item() if isinstance(grad_norm, torch.Tensor) else grad_norm
+            logs["learning_rate"] = self._get_learning_rate()
+
+            # 平均并记录自定义的loss日志
+            logs["total_loss"] = round(self.logging_loss_scalar["total_loss"] / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss_itc"] = round(self.logging_loss_scalar["loss_itc"] / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss_itm"] = round(self.logging_loss_scalar["loss_itm"] / (self.state.global_step - self._globalstep_last_logged), 4)
+            logs["loss_lm"] = round(self.logging_loss_scalar["loss_lm"] / (self.state.global_step - self._globalstep_last_logged), 4)
+
+            self._total_loss_scalar += tr_loss_scalar
+            self._globalstep_last_logged = self.state.global_step
+            self.store_flos()
+
+            # 重置累积的loss
+            self.logging_loss_scalar = {
+                "total_loss": 0.0,
+                "loss_itc": 0.0,
+                "loss_itm": 0.0,
+                "loss_lm": 0.0,
+                }
+
+            self.log(logs)
+
+        metrics = None
+        if self.control.should_evaluate:
+            metrics = self._evaluate(trial, ignore_keys_for_eval)
+
+        if self.control.should_save:
+            self._save_checkpoint(model, trial, metrics=metrics)
+            self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+    
+    def compute_loss(self, model, inputs, return_outputs=False):
+        outputs = model(**inputs)
+        loss = outputs["loss"]
+
+        self.logging_loss_scalar['total_loss'] += loss.item() / self.args.gradient_accumulation_steps
+        self.logging_loss_scalar['loss_itc'] += outputs["loss_itc"].item() / self.args.gradient_accumulation_steps
+        self.logging_loss_scalar['loss_itm'] += outputs["loss_itm"].item() / self.args.gradient_accumulation_steps
+        self.logging_loss_scalar['loss_lm'] += outputs["loss_lm"].item() / self.args.gradient_accumulation_steps
+
+        return (loss, outputs) if return_outputs else loss

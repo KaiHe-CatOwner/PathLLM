@@ -99,6 +99,7 @@ class Blip2QformerPatch(Blip2Base):
             vision_encoder.visual.output_tokens = True
         elif self.clip_name=="conch": 
             from conch.open_clip_custom import create_model_from_pretrained
+            # 448x448
             vision_encoder, image_processor = create_model_from_pretrained('conch_ViT-B-16', clip_path)
             img_embed_dim = 512
             vision_encoder.visual.output_tokens = True
@@ -119,11 +120,57 @@ class Blip2QformerPatch(Blip2Base):
         else:
             raise Exception("wrong clip")
         return vision_encoder, image_processor, img_embed_dim
+
+    def _split_and_pad(self, image_embeds, p_num):
+        """
+        Split the image_embeds tensor into k lists based on p_num and pad them to the max length.
+        Also generate the attention_mask.
+        
+        Args:
+        - image_embeds (torch.Tensor): The Nx512 tensor.
+        - p_num (list): List containing the number of embeddings for each segment.
+        
+        Returns:
+        - padded_lists (list): List of k tensors, each padded to the max length.
+        - attention_mask (torch.Tensor): Attention mask tensor with 1s for data positions and 0s for padding.
+        """
+        # Ensure p_num sums to N
+        assert sum(p_num) == image_embeds.size(0), "p_num does not sum to the number of embeddings"
+        
+        # Split the image_embeds tensor
+        start = 0
+        split_lists = []
+        for num in p_num:
+            split_lists.append(image_embeds[start:start + num])
+            start += num
+        
+        # Find the max length
+        max_length = max(p_num)
+        
+        # Pad the lists and create attention masks
+        padded_lists = []
+        attention_masks = []
+        for tensor in split_lists:
+            length = tensor.size(0)
+            padding = max_length - length
+            padded_tensor = torch.cat([tensor, torch.zeros((padding, tensor.size(1)))], dim=0) # max_length x 512
+            padded_lists.append(padded_tensor)
+            
+            # Create the attention mask
+            attention_mask = torch.cat([torch.ones(length), torch.zeros(padding)], dim=0)
+            attention_masks.append(attention_mask)
+        
+        # Stack the padded tensors and attention masks to create the final tensors
+        padded_tensors = torch.stack(padded_lists, dim=0) # batch x max_length x 512
+        attention_mask_tensor = torch.stack(attention_masks, dim=0).long() # batch x max_length
+        
+        return padded_tensors, attention_mask_tensor
     
     def forward(self, **kwargs):
 
         text = kwargs["text"]
         image = kwargs["image"]
+        p_num = kwargs["patch_num"]
 
         if self.clip_name == 'uni':
             image_embeds = self.vision_encoder(image)
@@ -132,7 +179,14 @@ class Blip2QformerPatch(Blip2Base):
         else: 
             image_embeds = self.vision_encoder.encode_image(image, normalize=False)[0] # no proj_contrast=False for clip
 
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device)
+        image_embeds, image_atts = self._split_and_pad(image_embeds, p_num)
+
+        image_embeds = image_embeds.to(image.device) # batch x max_length x 512
+        image_atts = image_atts.to(image.device) # batch x max_length
+        
+        # image_embeds = image_embeds.unsqueeze(1) # batch,512 -> batch,1,512
+        
+        # image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device) # batch,1
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
 
@@ -199,7 +253,7 @@ class Blip2QformerPatch(Blip2Base):
 
         ###============== Image-text Matching ===================###
         text_input_ids_world = concat_all_gather(text_tokens.input_ids)
-        text_attention_mask_world = concat_all_gather(attention_mask)
+        text_attention_mask_world = concat_all_gather(text_tokens.attention_mask)
         image_embeds_world = all_gather_with_grad(image_embeds)
         with torch.no_grad():
             sim_t2i[:, rank * bs : rank * bs + bs].fill_diagonal_(-10000)
@@ -227,7 +281,7 @@ class Blip2QformerPatch(Blip2Base):
         text_atts_neg = torch.stack(text_atts_neg, dim=0)
 
         text_ids_all = torch.cat([text_tokens.input_ids, text_tokens.input_ids, text_ids_neg], dim=0)  # pos, pos, neg
-        text_atts_all = torch.cat([attention_mask, attention_mask, text_atts_neg], dim=0)
+        text_atts_all = torch.cat([text_tokens.attention_mask, text_tokens.attention_mask, text_atts_neg], dim=0)
 
         query_tokens_itm = self.query_tokens.expand(text_ids_all.shape[0], -1, -1)
         query_atts_itm = torch.ones(query_tokens_itm.size()[:-1], dtype=torch.long).to(image.device)

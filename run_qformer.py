@@ -44,9 +44,8 @@ class ScriptArguments:
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
-    max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
-    save_steps: Optional[int] = field(default=50, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=5, metadata={"help": "Limits total number of checkpoints."})
+    save_steps: Optional[int] = field(default=5000, metadata={"help": "Number of updates steps before two checkpoint saves"})
+    save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -57,7 +56,9 @@ class ScriptArguments:
     eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
-    num_train_epochs: Optional[int] = field(default=1, metadata={"help": "the number of training epochs"})
+    max_steps: Optional[int] = field(default=200_000, metadata={"help": "the number of training steps"})
+    num_train_epochs: Optional[int] = field(default=-1, metadata={"help": "the number of training epochs"})
+    warmup_ratio: Optional[float] = field(default=0.1, metadata={"help": "the warmup ratio"})
         
     # eval
     evaluation_strategy: Optional[str] = field(default="steps", metadata={"help": "epoch, step"})
@@ -125,7 +126,7 @@ training_args = TrainingArguments(
     save_steps=script_args.save_steps,
     save_total_limit=script_args.save_total_limit,
     bf16=True,
-    warmup_ratio=0.1,
+    warmup_ratio=script_args.warmup_ratio,
     evaluation_strategy=script_args.evaluation_strategy,
     eval_steps=script_args.eval_steps,
     logging_first_step=True,

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 from collections.abc import Mapping
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch
 import numpy as np
+from PIL import Image
 
 class DataCollatorMixin:
     def __call__(self, features, return_tensors=None):
@@ -80,13 +81,66 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
+    def _resize_image(self, image, min_size=224):
+        """
+        Resize the image such that the shortest side is min_size while maintaining aspect ratio.
+        """
+        width, height = image.size
+        if width < min_size or height < min_size:
+            if width < height:
+                new_width = min_size
+                new_height = int(height * (min_size / width))
+            else:
+                new_height = min_size
+                new_width = int(width * (min_size / height))
+            return image.resize((new_width, new_height), Image.ANTIALIAS)
+        return image
+
+    def _crop_image(self, image, crop_size=224, overlap=0.5):
+        """
+        Crop the image into patches of crop_size with a specified overlap.
+        """
+        width, height = image.size
+        step = int(crop_size * (1 - overlap))
+        patches = []
+        for top in range(0, height - crop_size + 1, step):
+            for left in range(0, width - crop_size + 1, step):
+                box = (left, top, left + crop_size, top + crop_size)
+                patch = image.crop(box)
+                patches.append(patch)
+        
+        # Handling right and bottom edges
+        if width % crop_size != 0:
+            for top in range(0, height - crop_size + 1, step):
+                box = (width - crop_size, top, width, top + crop_size)
+                patch = image.crop(box)
+                patches.append(patch)
+        if height % crop_size != 0:
+            for left in range(0, width - crop_size + 1, step):
+                box = (left, height - crop_size, left + crop_size, height)
+                patch = image.crop(box)
+                patches.append(patch)
+        if width % crop_size != 0 and height % crop_size != 0:
+            box = (width - crop_size, height - crop_size, width, height)
+            patch = image.crop(box)
+            patches.append(patch)
+        
+        return patches
+
+
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         
-        temp_list = []
+        patch_list = []
+        num_list = []
         text_list = []
+
         for d in examples:
             # print(np.array(d["image"]).shape)
-            temp_list.append(self.image_processor(d["image"]))
+            image = self._resize_image(d["image"])
+            patches = self._crop_image(image) # [224 x 224]
+            patches = [self.image_processor(patch) for patch in patches] # [448x448]
+            patch_list += patches
+            num_list.append(len(patches))
             del d["image"]
 
         for d in examples:
@@ -94,7 +148,8 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
             del d["text"]
 
         batch = {"text": text_list}
-        batch["image"] = torch.stack(temp_list)
+        batch["image"] = torch.stack(patch_list)
+        batch["patch_num"] = num_list
 
         return batch
     

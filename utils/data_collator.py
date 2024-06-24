@@ -81,7 +81,7 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
-    def _resize_image(self, image, min_size=224):
+    def _resize_image(self, image, min_size=224, max_size=1024):
         """
         Resize the image such that the shortest side is min_size while maintaining aspect ratio.
         """
@@ -93,10 +93,20 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
             else:
                 new_height = min_size
                 new_width = int(width * (min_size / height))
-            return image.resize((new_width, new_height), Image.ANTIALIAS)
+            return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        elif width > max_size or height > max_size:
+            if width > height:
+                new_width = max_size
+                new_height = int(height * (max_size / width))
+            else:
+                new_height = max_size
+                new_width = int(width * (max_size / height))
+            return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
         return image
 
-    def _crop_image(self, image, crop_size=224, overlap=0.5):
+    def _crop_image(self, image, crop_size=448, overlap=0.5):
         """
         Crop the image into patches of crop_size with a specified overlap.
         """

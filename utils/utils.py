@@ -19,10 +19,12 @@ def clip_path_map(path):
         return "/bask/homes/a/asiw9691/PathVLM/PathClip/pathclip-base.pt"
     
     if path=="conch":
-        return "/bask/homes/a/asiw9691/PathVLM/CONCH/pytorch_model.bin"
+        # return "/bask/homes/a/asiw9691/PathVLM/CONCH/pytorch_model.bin"
+        return "/home/z/zeyugao/PreModel/conch/pytorch_model.bin"
     
     if path=="uni":
-        return "/bask/homes/a/asiw9691/PathVLM/UNI/pytorch_model.bin"
+        # return "/bask/homes/a/asiw9691/PathVLM/UNI/pytorch_model.bin"
+        return "/home/z/zeyugao/PreModel/uni/pytorch_model.bin"
 
 
 def my_compute_metrics(p):

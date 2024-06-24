@@ -10,12 +10,6 @@
 #SBATCH -o ./logs/slurm.%N.%j.out # STDOUT
 #SBATCH -e ./logs/slurm.%N.%j.err # STDERR
 
-# module purge
-# module load baskerville
-# module load GCCcore/10.2.0 Python/3.8.6
-# module load CUDA/11.7.0
-# module load cuDNN/8.4.1.50-CUDA-11.7.0
-
 module purge
 module load bask-apps/live
 module load GCCcore/11.3.0 Python/3.10.4

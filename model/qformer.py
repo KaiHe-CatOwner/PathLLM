@@ -141,7 +141,7 @@ class Blip2QformerPatch(Blip2Base):
         start = 0
         split_lists = []
         for num in p_num:
-            split_lists.append(image_embeds[start:start + num])
+            split_lists.append(image_embeds[start : start + num])
             start += num
         
         # Find the max length
@@ -153,11 +153,11 @@ class Blip2QformerPatch(Blip2Base):
         for tensor in split_lists:
             length = tensor.size(0)
             padding = max_length - length
-            padded_tensor = torch.cat([tensor, torch.zeros((padding, tensor.size(1)))], dim=0) # max_length x 512
+            padded_tensor = torch.cat([tensor, torch.zeros((padding, tensor.size(1))).to(tensor.device)], dim=0) # max_length x 512
             padded_lists.append(padded_tensor)
             
             # Create the attention mask
-            attention_mask = torch.cat([torch.ones(length), torch.zeros(padding)], dim=0)
+            attention_mask = torch.cat([torch.ones(length), torch.zeros(padding)], dim=0).to(tensor.device)
             attention_masks.append(attention_mask)
         
         # Stack the padded tensors and attention masks to create the final tensors
@@ -172,23 +172,24 @@ class Blip2QformerPatch(Blip2Base):
         image = kwargs["image"]
         p_num = kwargs["patch_num"]
 
-        if self.clip_name == 'uni':
-            image_embeds = self.vision_encoder(image)
-        elif self.clip_name == 'conch':
-            image_embeds = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
-        else: 
-            image_embeds = self.vision_encoder.encode_image(image, normalize=False)[0] # no proj_contrast=False for clip
+        with torch.inference_mode():
+            if self.clip_name == 'uni':
+                image_embeds = self.vision_encoder(image)
+            elif self.clip_name == 'conch':
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+            else: 
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False)[0] # no proj_contrast=False for clip
 
         image_embeds, image_atts = self._split_and_pad(image_embeds, p_num)
 
-        image_embeds = image_embeds.to(image.device) # batch x max_length x 512
-        image_atts = image_atts.to(image.device) # batch x max_length
+        image_embeds = image_embeds.to(image.device).to(torch.bfloat16) # batch x max_length x 512
+        image_atts = image_atts.to(image.device).to(torch.bfloat16) # batch x max_length
         
         # image_embeds = image_embeds.unsqueeze(1) # batch,512 -> batch,1,512
         
         # image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image.device) # batch,1
 
-        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1).to(torch.bfloat16)
 
         query_output = self.Qformer.bert(
             query_embeds=query_tokens,
@@ -201,12 +202,12 @@ class Blip2QformerPatch(Blip2Base):
         image_feats = F.normalize(self.vision_proj(query_output.last_hidden_state), dim=-1)
 
         text_tokens = self.tokenizer(
-                    text,
-                    padding="max_length",
-                    truncation=True,
-                    max_length=self.max_txt_len,
-                    return_tensors="pt",
-                ).to(image.device)
+                                    text,
+                                    padding="max_length",
+                                    truncation=True,
+                                    max_length=self.max_txt_len,
+                                    return_tensors="pt",
+                                    ).to(image.device)
 
         text_output = self.Qformer.bert(
             text_tokens.input_ids,
@@ -241,7 +242,7 @@ class Blip2QformerPatch(Blip2Base):
         sim_t2i = sim_t2i / self.temp  # [batch_size, batch_size*num_gpu]
 
         rank = dist.get_rank()
-        bs = image.size(0)
+        bs = image_embeds.size(0)
         targets = torch.linspace(rank * bs, rank * bs + bs - 1, bs, dtype=int).to(
             image.device
         )

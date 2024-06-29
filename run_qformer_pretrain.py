@@ -5,14 +5,14 @@ import ast
 import random
 import pandas as pd
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
-from utils.my_trainer import CustomTrainer
+from utils.my_trainer import QformerTrainer
 from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
-from model.my_model import PPathVLM, WPathVLM
+from model.qformer import Blip2QformerPatch
 from peft import LoraConfig
-from datasets import load_dataset, concatenate_datasets, load_from_disk
-from utils.data_collator import MyDataCollatorForPPathVLM
+from datasets import load_dataset, load_from_disk, concatenate_datasets
+from utils.data_collator import MyDataCollatorForQFormerPatchPretrain
 
 @dataclass
 class ScriptArguments:
@@ -31,6 +31,7 @@ class ScriptArguments:
     # model
     llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B, meta-llama/Llama-2-7b-chat-hf "})
     clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base / uni"})
+    bert_name: Optional[str] = field(default="microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext", metadata={"help": "the bert name"})
     
     # data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
@@ -43,9 +44,8 @@ class ScriptArguments:
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
-    max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
-    save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=5, metadata={"help": "Limits total number of checkpoints."})
+    save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps between two checkpoint saves"})
+    save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -56,7 +56,9 @@ class ScriptArguments:
     eval_batch_size: Optional[int] = field(default=48, metadata={"help": "the batch size"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     gradient_accumulation_steps: Optional[int] = field(default=8, metadata={"help": "the number of gradient accumulation steps"})
+    max_steps: Optional[int] = field(default=200_000, metadata={"help": "the number of training steps"})
     num_train_epochs: Optional[int] = field(default=-1, metadata={"help": "the number of training epochs"})
+    warmup_ratio: Optional[float] = field(default=0.1, metadata={"help": "the warmup ratio"})
         
     # eval
     evaluation_strategy: Optional[str] = field(default="steps", metadata={"help": "epoch, step"})
@@ -77,60 +79,14 @@ seed_everything(script_args.seed)
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 
-# set up tokenizer
-tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
-tokenizer.truncation_side = 'left'
-
-new_tokens = ['<Question>',  '<Answer>', '<Image>']
-num_added_toks = tokenizer.add_tokens(new_tokens)
-new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
-print("new_tokens_ids: ", new_tokens_ids)
-
-questions = pd.read_csv('./utils/question_list.csv', header=None)  
-questions = questions[0].tolist()
-
-def formatting_func_itp(examples):
-    question = random.choice(questions)
-    answer = examples["txt"]
-    text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-def formatting_func_vqap(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    if answer in ["yes","no"]:
-        question += "Answer yes or no only!"
-    question = question.replace("<image>\n", "")
-    question = question.replace("<image>", "")
-    text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-# CNX-PathLLM/MultiConversation
-# [{'from': 'human', 'value': 'What are the key features of this image that suggest chronic pancreatitis?'},
-# {'from': 'gpt', 'value': 'The presence of duct dilatation, fibrosis, and pancreatic tissue necrosis are indicative of chronic pancreatitis.}]
-def formatting_func_vmc(examples): # image conversations
-    conversation = examples["conversations"]
-    conversation = ast.literal_eval(conversation)
-    text = ""
-    for sentence in conversation:
-        sentence['value'] = sentence['value'].replace("<image>\n", "")
-        sentence['value'] = sentence['value'].replace("<image>", "")
-        if sentence['from'] == 'human':
-            text += f"<Question> {sentence['value']}{tokenizer.eos_token}"
-        elif sentence['from'] == 'gpt':
-            text += f"<Answer> {sentence['value']}{tokenizer.eos_token}"
+def formatting_func(examples):
+    text = examples["txt"]
     examples["text"] = text
     return examples
 
 def formatting_func_ytb(examples):
-    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
-    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
-    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
-    text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    text = examples['conversations']
+    text = ast.literal_eval(text[1:-1].split('\n')[1])['value']
     examples["text"] = text
     return examples
 
@@ -146,7 +102,7 @@ eval_dataset = None
 for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     one_dataset = one_dataset.rename_column('jpg', 'image')
-    one_dataset = one_dataset.map(formatting_func_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
+    one_dataset = one_dataset.map(formatting_func, num_proc=4, remove_columns=['txt','__key__', '__url__'])
     dataset.append(one_dataset)
 
 for dataset_name in script_args.dataset_local_paths.split(","):
@@ -154,40 +110,15 @@ for dataset_name in script_args.dataset_local_paths.split(","):
     one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
     dataset.append(one_dataset)
 
-# for dataset_name in script_args.dataset_name_list.split(","):
-#     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
-#     if dataset_name in ["CNX-PathLLM/PVQAClean"]:
-#         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
-#         one_dataset = one_dataset.train_test_split(test_size=0.1)
-#         eval_dataset = one_dataset['test']
-#         one_dataset = one_dataset['train']
-#     elif dataset_name in ["CNX-PathLLM/Pathinstruct"]:
-#         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
-#     elif dataset_name in ["CNX-PathLLM/TextbookQAPair"]:
-#         # one_dataset = one_dataset.filter(lambda x: x is not None, num_proc=20)
-#         # for key in one_dataset.features.keys():
-#         #     one_dataset = one_dataset.filter(lambda x: x[key] is not None, num_proc=20)
-#         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
-#     elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
-#         one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
-#     else:
-#         one_dataset = one_dataset.rename_column('jpg', 'image')
-#         one_dataset = one_dataset.map(formatting_func_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
-#     dataset.append(one_dataset)
-
 dataset = concatenate_datasets(dataset)
 train_dataset = dataset
 
-model = PPathVLM(script_args.llm_requires_grad, 
-                script_args.clip_name, 
-                script_args.load_in_8bit, 
-                script_args.load_in_4bit, 
-                script_args.llm_name, 
-                script_args.trust_remote_code, 
-                script_args.token, 
-                tokenizer,
-                new_tokens_ids[-1],
-                script_args.data_cache_dir)
+model = Blip2QformerPatch(clip_name = script_args.clip_name,
+                            num_query_token = 16,
+                            cross_attention_freq = 2,
+                            embed_dim = 256,
+                            pretrain_name = script_args.bert_name,
+                            max_txt_len = 128,)
 
 print("output dir is set to: {}".format(script_args.output_dir))
 
@@ -206,7 +137,7 @@ training_args = TrainingArguments(
     save_steps=script_args.save_steps,
     save_total_limit=script_args.save_total_limit,
     bf16=True,
-    warmup_ratio=0.1,
+    warmup_ratio=script_args.warmup_ratio,
     evaluation_strategy=script_args.evaluation_strategy,
     eval_steps=script_args.eval_steps,
     logging_first_step=True,
@@ -225,9 +156,9 @@ else:
     peft_config = None
 
 
-data_collator = MyDataCollatorForPPathVLM(tokenizer=tokenizer, image_processor=model.image_processor)
+data_collator = MyDataCollatorForQFormerPatchPretrain(image_processor=model.image_processor, tokenizer=None)
 
-trainer = CustomTrainer(
+trainer = QformerTrainer(
     model=model,
     args=training_args,
     max_seq_length=script_args.max_seq_length,
@@ -235,7 +166,7 @@ trainer = CustomTrainer(
     eval_dataset=eval_dataset,
     dataset_text_field=script_args.dataset_text_field,
     peft_config=peft_config,
-    tokenizer=tokenizer,
+    tokenizer=model.tokenizer,
     data_collator=data_collator,
     compute_metrics=my_compute_metrics,
 )

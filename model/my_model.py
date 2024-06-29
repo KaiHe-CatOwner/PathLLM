@@ -36,10 +36,12 @@ class Attn_Net_Gated(nn.Module):
         return A
 
 class PPathVLM(nn.Module):
-    def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token, tokenizer, image_token_id, data_cache_dir):
+    def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, 
+                 trust_remote_code, token, tokenizer, image_token_id, data_cache_dir='~/.cache'):
         nn.Module.__init__(self)
 
         self.clip_name = clip_name
+        self.data_cache_dir = data_cache_dir
 
         self.vision_encoder, self.image_processor, self.embed_dim = self.load_vision_encoder()
 
@@ -47,15 +49,64 @@ class PPathVLM(nn.Module):
         self.llm = self.load_llm(load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token)
         self.embedding_layer = self.llm.get_input_embeddings()
 
-        self.fusion_layer_S = nn.Linear(self.embed_dim, self.llm.config.hidden_size)
-        self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8,  batch_first=True)
+        # self.fusion_layer_S = nn.Linear(self.embed_dim, self.llm.config.hidden_size)
+        self.resampler_layer = nn.Sequential(
+                                            nn.LayerNorm(self.embed_dim),
+                                            nn.Linear(self.embed_dim, self.llm.config.hidden_size, bias=False),
+                                            nn.ReLU(),
+                                            nn.Dropout(0.25),
+                                            )
+        # self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8,  batch_first=True)
         
         self.config = self.llm.config
         self.image_token_id = image_token_id
         self.vision_encoder.requires_grad = False
         self.llm.requires_grad = llm_requires_grad
-        self.data_cache_dir = data_cache_dir
 
+    def _split_and_pad(self, image_embeds, p_num):
+        """
+        Split the image_embeds tensor into k lists based on p_num and pad them to the max length.
+        Also generate the attention_mask.
+        
+        Args:
+        - image_embeds (torch.Tensor): The Nx512 tensor.
+        - p_num (list): List containing the number of embeddings for each segment.
+        
+        Returns:
+        - padded_lists (list): List of k tensors, each padded to the max length.
+        - attention_mask (torch.Tensor): Attention mask tensor with 1s for data positions and 0s for padding.
+        """
+        # Ensure p_num sums to N
+        assert sum(p_num) == image_embeds.size(0), "p_num does not sum to the number of embeddings"
+        
+        # Split the image_embeds tensor
+        start = 0
+        split_lists = []
+        for num in p_num:
+            split_lists.append(image_embeds[start : start + num])
+            start += num
+        
+        # Find the max length
+        max_length = max(p_num)
+        
+        # Pad the lists and create attention masks
+        padded_lists = []
+        attention_masks = []
+        for tensor in split_lists:
+            length = tensor.size(0)
+            padding = max_length - length
+            padded_tensor = torch.cat([tensor, torch.zeros((padding, tensor.size(1))).to(tensor.device)], dim=0) # max_length x 512
+            padded_lists.append(padded_tensor)
+            
+            # Create the attention mask
+            attention_mask = torch.cat([torch.ones(length), torch.zeros(padding)], dim=0).to(tensor.device)
+            attention_masks.append(attention_mask)
+        
+        # Stack the padded tensors and attention masks to create the final tensors
+        padded_tensors = torch.stack(padded_lists, dim=0) # batch x max_length x 512
+        attention_mask_tensor = torch.stack(attention_masks, dim=0).long() # batch x max_length
+        
+        return padded_tensors, attention_mask_tensor
 
     def load_vision_encoder(self):
         print("vision_encoder loading ...")
@@ -88,33 +139,6 @@ class PPathVLM(nn.Module):
             raise Exception("wrong clip")
         return vision_encoder, image_processor, embed_dim
     
-    def generate(self, *args, **kwargs):
-        generation_config = GenerationConfig(
-                max_length=100,
-                temperature=1.0,
-                top_k=50,
-                top_p=0.95,
-                num_return_sequences=1,
-                repetition_penalty=1.1,
-                do_sample=True,
-                pad_token_id=self.llm_tokenizer.eos_token_id,
-                bos_token_id=self.llm_tokenizer.bos_token_id,
-            )
-        
-        with torch.no_grad():
-            input_ids = kwargs["input_ids"]
-            image = kwargs["image"]
-            attention_mask = kwargs["attention_mask"]
-            fusion_embs = self.get_fusion_embedding(input_ids, image)
-            attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
-            res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=attention_mask, generation_config=generation_config)
-
-        generate_list = []
-        for item in res:
-            generation = self.llm_tokenizer.decode(item, skip_special_tokens=True)
-            generate_list.append(generation)
-        return generate_list
-
     def load_llm(self, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token):
         print("llm loading ...")
         if load_in_8bit and load_in_4bit:
@@ -145,6 +169,33 @@ class PPathVLM(nn.Module):
         llm.resize_token_embeddings(len(self.llm_tokenizer))
         return llm
     
+    def generate(self, *args, **kwargs):
+        generation_config = GenerationConfig(
+                max_length=100,
+                temperature=1.0,
+                top_k=50,
+                top_p=0.95,
+                num_return_sequences=1,
+                repetition_penalty=1.1,
+                do_sample=True,
+                pad_token_id=self.llm_tokenizer.eos_token_id,
+                bos_token_id=self.llm_tokenizer.bos_token_id,
+            )
+        
+        with torch.no_grad():
+            input_ids = kwargs["input_ids"]
+            image = kwargs["image"]
+            attention_mask = kwargs["attention_mask"]
+            fusion_embs = self.get_fusion_embedding(input_ids, image)
+            attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
+            res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=attention_mask, generation_config=generation_config)
+
+        generate_list = []
+        for item in res:
+            generation = self.llm_tokenizer.decode(item, skip_special_tokens=True)
+            generate_list.append(generation)
+        return generate_list
+    
     def pad_attention_fusion(self, new_seq_len, need_pad_seq):
         padd_len = new_seq_len - need_pad_seq.size(1)
         bz = need_pad_seq.size(0)
@@ -168,22 +219,12 @@ class PPathVLM(nn.Module):
         return paded_seq
 
 
-    def get_fusion_embedding(self, input_ids, image):
+    def get_fusion_embedding(self, input_ids, image_embs):
         token_embs = self.embedding_layer(input_ids)
-        if self.clip_name == 'uni':
-            image_embs = self.vision_encoder(image)
-        elif self.clip_name == 'conch':
-            image_embs = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
-        else: 
-            image_embs = self.vision_encoder.encode_image(image, normalize=False) # no proj_contrast=False for clip
-        # print(image_embs.shape)
-        # image_embs = torch.stack(image_embs, dim=0)
-        if self.clip_name == 'pathclip-base':
-            mapped_image_embs = self.fusion_layer_S(image_embs[0]) # shape (bz, 512) - (bz, 4096)
-        else:
-            mapped_image_embs = self.fusion_layer_S(image_embs) # shape (bz, 512) - (bz, 4096)
-        mapped_image_embs = self.fusion_layer_E(mapped_image_embs) # shape (bz, 4096)
-        mapped_image_embs = mapped_image_embs.unsqueeze(1) # shape (bz, 1, llm_hidden_state)
+
+        mapped_image_embs = self.resampler_layer(image_embs) # shape (bz, 512) - (bz, 4096)
+        # mapped_image_embs = self.fusion_layer_E(mapped_image_embs) # shape (bz, 4096)
+        # mapped_image_embs = mapped_image_embs.unsqueeze(1) # shape (bz, 1, llm_hidden_state)
         
         image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(mapped_image_embs.device))
         batch_image_token_emb = image_token_emb.repeat(mapped_image_embs.size(0), 1, 1)
@@ -191,18 +232,33 @@ class PPathVLM(nn.Module):
         return fusion_embs
     
     def forward(self, *args, **kwargs):
-        input_ids = kwargs["input_ids"]
         image = kwargs["image"]
-        attention_mask = kwargs["attention_mask"]
-        labels = kwargs["labels"]
-        fusion_embs = self.get_fusion_embedding(input_ids, image)
+        p_num = kwargs["patch_num"]
+        input_ids = kwargs["input_ids"].to(image.device) # ids for text_output
+        attention_mask = kwargs["attention_mask"].to(image.device) # attention mask for text_output
+        labels = kwargs["labels"].to(image.device)  # ids for text_output
+
+        with torch.inference_mode():
+            if self.clip_name == 'uni':
+                image_embeds = self.vision_encoder(image)
+            elif self.clip_name == 'conch':
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+            else: 
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False)[0] # no proj_contrast=False for clip
+
+        image_embeds, image_atts = self._split_and_pad(image_embeds, p_num)
+
+        image_embeds = image_embeds.to(image.device).to(torch.bfloat16)# batch x max_length x 512
+        image_atts = image_atts.to(image.device) # batch x max_length
+        attention_mask = torch.cat([image_atts, attention_mask], dim=1)
+    
+        fusion_embs = self.get_fusion_embedding(input_ids, image_embeds)
         attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
         labels = self.pad_label_fusion(fusion_embs.size(1), labels)
 
         output = self.llm(inputs_embeds=fusion_embs, attention_mask=attention_mask, labels=labels)
         return output
     
-
 class WPathVLM(PPathVLM):
     def __init__(self, llm_requires_grad, load_in_8bit, load_in_4bit, llm_name, 
                  trust_remote_code, token, tokenizer, image_token_id,

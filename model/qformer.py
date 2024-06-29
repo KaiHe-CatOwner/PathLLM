@@ -19,6 +19,9 @@ from lavis.models.blip2_models.blip2 import (
 )
 from lavis.models.blip_models.blip_outputs import BlipOutput, BlipOutputFeatures
 
+from accelerate import Accelerator
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, GenerationConfig
+
 from utils.utils import clip_path_map
 
 
@@ -50,7 +53,6 @@ class Blip2QformerPatch(Blip2Base):
         >>> from lavis.models import load_model
         >>> model = load_model("blip2", "pretrain")
     """
-
     def __init__(
         self,
         clip_name="conch",
@@ -66,12 +68,11 @@ class Blip2QformerPatch(Blip2Base):
 
         self.vision_encoder, self.image_processor, self.img_embed_dim = self.load_vision_encoder() # LayerNorm is already done by conch
 
-        self.tokenizer = init_tokenizer(pretrain_name=pretrain_name) 
-
         self.vision_encoder.requires_grad = False
         self.vision_encoder = self.vision_encoder.eval()
 
-        self.Qformer, self.query_tokens = init_Qformer(num_query_token, self.img_embed_dim, cross_attention_freq, pretrain_name,)
+        self.tokenizer = init_tokenizer(pretrain_name=pretrain_name) 
+        self.Qformer, self.query_tokens = init_Qformer(num_query_token, self.img_embed_dim, cross_attention_freq, pretrain_name)
 
         self.Qformer.resize_token_embeddings(len(self.tokenizer))
         state_dict = self.Qformer.state_dict()
@@ -335,3 +336,165 @@ class Blip2QformerPatch(Blip2Base):
             loss_itm=loss_itm,
             loss_lm=loss_lm,
         )
+
+
+class Blip2QformerPathInstruct(Blip2QformerPatch):
+    def __init__(self,  clip_name="conch",
+                        num_query_token=16,
+                        cross_attention_freq=2,
+                        pretrain_name = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext",
+                        llm_requires_grad=False, 
+                        load_in_8bit=False, 
+                        load_in_4bit=False, 
+                        llm_name = 'meta-llama/Meta-Llama-3-8B-Instruct', 
+                        trust_remote_code=False, token=True, 
+                        llm_tokenizer=None, image_token_id=None,
+                        data_cache_dir = '~/.cache',
+                        max_txt_len = 256):
+        
+        nn.Module.__init__(self)
+
+        self.clip_name = clip_name
+
+        self.vision_encoder, self.image_processor, self.img_embed_dim = self.load_vision_encoder() # LayerNorm is already done by conch
+
+        self.vision_encoder.requires_grad = False
+        self.vision_encoder = self.vision_encoder.eval()
+
+        self.bert_tokenizer = init_tokenizer(pretrain_name=pretrain_name) 
+        self.Qformer, self.query_tokens = init_Qformer(num_query_token, self.img_embed_dim, cross_attention_freq, pretrain_name)
+        self.Qformer = self.Qformer.to(torch.bfloat16)
+        self.Qformer.resize_token_embeddings(len(self.bert_tokenizer))
+
+        state_dict = self.Qformer.state_dict()
+        for name, param in self.Qformer.named_parameters():
+            if "_query" in name:
+                key_orig = name.replace("_query", "")
+                param.data.copy_(state_dict[key_orig])
+
+        self.llm_tokenizer = llm_tokenizer
+        self.data_cache_dir = data_cache_dir
+        self.llm = self.load_llm(load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token)
+        self.embedding_layer = self.llm.get_input_embeddings()
+
+        self.resampler_layer = nn.Sequential(
+                                            nn.LayerNorm(self.Qformer.config.hidden_size),
+                                            nn.Linear(self.Qformer.config.hidden_size, self.llm.config.hidden_size, bias=False),
+                                            nn.ReLU(),
+                                            nn.Dropout(0.25),
+                                            )
+        
+        self.config = self.llm.config
+        self.image_token_id = image_token_id
+        self.llm.requires_grad = llm_requires_grad
+        self.max_txt_len = max_txt_len
+
+
+    def load_llm(self, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token):
+        print("llm loading ...")
+        if load_in_8bit and load_in_4bit:
+            raise ValueError("You can't load the model in 8 bits and 4 bits at the same time")
+        elif load_in_8bit or load_in_4bit:
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=load_in_8bit, load_in_4bit=load_in_4bit
+            )
+            # Copy the model to each device
+            device_map = {"": Accelerator().local_process_index}
+            torch_dtype = torch.bfloat16
+        else:
+            device_map = None
+            quantization_config = None
+            torch_dtype = None
+
+
+        llm = AutoModelForCausalLM.from_pretrained(
+                    llm_name,
+                    quantization_config=quantization_config,
+                    device_map=device_map,
+                    trust_remote_code=trust_remote_code,
+                    torch_dtype=torch_dtype,
+                    token=token,
+                    use_cache= True,
+                    cache_dir = self.data_cache_dir,
+                )
+        llm.resize_token_embeddings(len(self.llm_tokenizer))
+        return llm
+        
+
+    def get_fusion_embedding(self, input_ids, query_token):
+        token_embs = self.embedding_layer(input_ids) # text token
+        image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(query_token.device)) # special token for <Image>
+        batch_image_token_emb = image_token_emb.repeat(query_token.size(0), 1, 1)
+        fusion_embs =  torch.cat((batch_image_token_emb, query_token, token_embs), dim=1)
+        return fusion_embs
+
+    def pad_attention_fusion(self, new_seq_len, need_pad_seq):
+        padd_len = new_seq_len - need_pad_seq.size(1)
+        bz = need_pad_seq.size(0)
+        generated_pad = torch.ones((bz, padd_len), dtype=need_pad_seq.dtype).to(need_pad_seq.device)
+        paded_seq = torch.cat((generated_pad, need_pad_seq), dim=1)
+        return paded_seq
+    
+    def pad_label_fusion(self, new_seq_len, labels):
+        padd_len = new_seq_len - labels.size(1)
+        bz = labels.size(0)
+        generated_pad = torch.ones((bz, padd_len), dtype=labels.dtype).fill_(-100).to(labels.device)
+        paded_seq = torch.cat((generated_pad, labels), dim=1)
+        return paded_seq
+
+    def forward(self, *args, **kwargs):
+
+        text = kwargs["text_input"] # original text for inupt, i.e. question
+        image = kwargs["image"]
+        p_num = kwargs["patch_num"]
+
+        llm_input_ids = kwargs["input_ids"].to(image.device) # ids for text_output
+        llm_input_attention_mask = kwargs["attention_mask"].to(image.device) # attention mask for text_output
+        labels = kwargs["labels"].to(image.device)  # ids for text_output
+
+        with torch.inference_mode():
+            if self.clip_name == 'uni':
+                image_embeds = self.vision_encoder(image)
+            elif self.clip_name == 'conch':
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+            else: 
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False)[0] # no proj_contrast=False for clip
+
+        image_embeds, image_atts = self._split_and_pad(image_embeds, p_num)
+
+        image_embeds = image_embeds.to(image.device).to(torch.bfloat16) # batch x max_length x 512
+        image_atts = image_atts.to(image.device) # batch x max_length
+
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1).to(torch.bfloat16) # learnable query
+        
+        text_Qformer = self.bert_tokenizer(
+                            text,
+                            padding='longest',
+                            truncation=True,
+                            max_length=self.max_txt_len,
+                            return_tensors="pt",
+                        ).to(image.device)
+        
+        query_atts = torch.ones(query_tokens.size()[:-1]).to(image.device)
+        Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask],dim=1)
+
+        query_output = self.Qformer.bert(
+                            text_Qformer.input_ids,
+                            attention_mask=Qformer_atts,
+                            query_embeds=query_tokens,
+                            encoder_hidden_states=image_embeds,
+                            encoder_attention_mask=image_atts,
+                            return_dict=True,
+                        )
+
+        llm_query_input = self.resampler_layer(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+
+        fusion_embs = self.get_fusion_embedding(llm_input_ids, llm_query_input)
+
+        fusion_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), llm_input_attention_mask)
+
+        labels = self.pad_label_fusion(fusion_embs.size(1), labels)
+
+        output = self.llm(inputs_embeds=fusion_embs, attention_mask=fusion_attention_mask, labels=labels)
+
+        return output

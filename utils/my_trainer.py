@@ -362,7 +362,6 @@ class CustomTrainer(Trainer):
             batch_size=self.dataset_batch_size,
             input_columns=['text'],
        ) 
-
         return tokenized_dataset
 
     def get_train_dataloader(self) -> DataLoader:
@@ -500,7 +499,6 @@ class QformerTrainer(CustomTrainer):
         add_special_tokens=True,
         remove_unused_columns=True,
     ):
-
         return dataset
 
     def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):

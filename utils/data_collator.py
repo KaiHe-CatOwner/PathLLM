@@ -20,54 +20,10 @@ class DataCollatorMixin:
             return self.numpy_call(features)
         else:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
-
 @dataclass
-class MyDataCollatorForPPathVLM(DataCollatorMixin):
+class MyDataCollatorForQFormerPatchPretrain(DataCollatorMixin):
+    image_processor: Any
     tokenizer: PreTrainedTokenizerBase
-    image_processor: Any
-    mlm: bool = False
-    mlm_probability: float = 0.15
-    pad_to_multiple_of: Optional[int] = None
-    tf_experimental_compile: bool = False
-    return_tensors: str = "pt"
-
-    def __post_init__(self): 
-        if self.mlm and self.tokenizer.mask_token is None:
-            raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
-                "You should pass `mlm=False` to train on causal language modeling instead."
-            )
-
-    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        
-        temp_list = []
-        for d in examples:
-            # print(np.array(d["image"]).shape)
-            temp_list.append(self.image_processor(d["image"]))
-            del d["image"]
-
-        if isinstance(examples[0], Mapping):
-            batch = pad_without_fast_tokenizer_warning(
-                self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
-            )
-        else:
-            batch = {
-                "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
-            }
-
-        # If special token mask has been preprocessed, pop it from the dict.
-        labels = batch["input_ids"].clone()
-        if self.tokenizer.pad_token_id is not None:
-            labels[labels == self.tokenizer.pad_token_id] = -100
-
-        batch["labels"] = labels
-        batch["image"] = torch.stack(temp_list)
-
-        return batch
-    
-@dataclass
-class MyDataCollatorForQFormerPatch(DataCollatorMixin):
-    image_processor: Any
     mlm: bool = False
     mlm_probability: float = 0.15
     pad_to_multiple_of: Optional[int] = None
@@ -81,7 +37,7 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
-    def _resize_image(self, image, min_size=224, max_size=1024):
+    def _resize_image(self, image, min_size=448, max_size=1024):
         """
         Resize the image such that the shortest side is min_size while maintaining aspect ratio.
         """
@@ -137,7 +93,6 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
         
         return patches
 
-
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         
         patch_list = []
@@ -162,7 +117,139 @@ class MyDataCollatorForQFormerPatch(DataCollatorMixin):
         batch["patch_num"] = num_list
 
         return batch
+
+@dataclass
+class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrain):
+    image_processor: Any
+    tokenizer: PreTrainedTokenizerBase
+    mlm: bool = False
+    mlm_probability: float = 0.15
+    pad_to_multiple_of: Optional[int] = None
+    tf_experimental_compile: bool = False
+    return_tensors: str = "pt"
+        
+    def pad_token_id_list(self, input_id_list, padding_value=0):
+        """
+        Pad the list of token ID lists to the maximum length of lists in the input.
+        
+        Args:
+            input_id_list (List[List[int]]): List of token ID lists, each list represents a sequence of token IDs.
+            padding_value (int, optional): The value used for padding shorter lists. Defaults to 0.
+        
+        Returns:
+            List[List[int]]: A new list where all inner lists are padded to the maximum length found in the original list.
+        """
+        # Find the maximum length of the lists in the input
+        max_length = max(len(inner_list) for inner_list in input_id_list)
+        
+        # Create a new list where each inner list is padded to the maximum length
+        padded_list = [inner_list + [padding_value] * (max_length - len(inner_list)) for inner_list in input_id_list]
+        
+        return padded_list
     
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        
+        patch_list = []
+        num_list = []
+        input_id_list = []
+        attention_mask_list = []
+        text_input_list = []
+
+        for d in examples:
+            image = self._resize_image(d["image"])
+            patches = self._crop_image(image) # [448x448]
+            patches = [self.image_processor(patch) for patch in patches] # [448x448]
+            patch_list += patches
+            num_list.append(len(patches))
+            del d["image"]
+
+        for d in examples:
+            input_id_list.append(d["input_ids"])
+            attention_mask_list.append(d["attention_mask"])
+            text_input_list.append(d["text_input"])
+            # del d["text"]
+            del d["text_input"]
+        # if isinstance(examples[0], Mapping):
+        #     batch = pad_without_fast_tokenizer_warning(
+        #         self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+        #     )
+        #     print("isinstance over!")
+        # else:
+        #     batch = {
+        #         "input_ids": _torch_collate_batch(examples, self.tokenizer, pad_to_multiple_of=self.pad_to_multiple_of)
+        #     }
+        # If special token mask has been preprocessed, pop it from the dict.
+        
+        input_id_list = self.pad_token_id_list(input_id_list, self.tokenizer.pad_token_id)
+        attention_mask_list = self.pad_token_id_list(attention_mask_list, 0)
+
+        batch = {"input_ids": torch.tensor(input_id_list)}
+        batch["attention_mask"] = torch.tensor(attention_mask_list)
+        
+        labels = batch["input_ids"].clone()
+        if self.tokenizer.pad_token_id is not None:
+            labels[labels == self.tokenizer.pad_token_id] = -100
+
+        # batch = {"text": text_list}
+        batch["text_input"] = text_input_list
+        batch["labels"] = labels
+        batch["image"] = torch.stack(patch_list)
+        batch["patch_num"] = num_list
+        return batch
+
+@dataclass
+class MyDataCollatorForPPathVLM(MyDataCollatorForQFormerPatchInstruct):
+    tokenizer: PreTrainedTokenizerBase
+    image_processor: Any
+    mlm: bool = False
+    mlm_probability: float = 0.15
+    pad_to_multiple_of: Optional[int] = None
+    tf_experimental_compile: bool = False
+    return_tensors: str = "pt"
+
+    def __post_init__(self): 
+        if self.mlm and self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
+                "You should pass `mlm=False` to train on causal language modeling instead."
+            )
+
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        
+        patch_list = []
+        num_list = []
+        input_id_list = []
+        attention_mask_list = []
+
+        for d in examples:
+            image = self._resize_image(d["image"])
+            patches = self._crop_image(image) # [448x448]
+            patches = [self.image_processor(patch) for patch in patches] # [448x448]
+            patch_list += patches
+            num_list.append(len(patches))
+            del d["image"]
+
+        for d in examples:
+            input_id_list.append(d["input_ids"])
+            attention_mask_list.append(d["attention_mask"])
+        
+        input_id_list = self.pad_token_id_list(input_id_list, self.tokenizer.pad_token_id)
+        attention_mask_list = self.pad_token_id_list(attention_mask_list, 0)
+
+        batch = {"input_ids": torch.tensor(input_id_list)}
+        batch["attention_mask"] = torch.tensor(attention_mask_list)
+        
+        labels = batch["input_ids"].clone()
+        if self.tokenizer.pad_token_id is not None:
+            labels[labels == self.tokenizer.pad_token_id] = -100
+
+        # batch = {"text": text_list}
+        batch["labels"] = labels
+        batch["image"] = torch.stack(patch_list)
+        batch["patch_num"] = num_list
+        return batch
+    
+
 
 @dataclass
 class MyDataCollatorForWPathVLM(DataCollatorMixin):

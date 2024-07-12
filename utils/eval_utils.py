@@ -1,7 +1,7 @@
 from collections import defaultdict
 import re
 import math
-from rouge import Rouge 
+# from rouge import Rouge 
 import numpy as np
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
@@ -31,13 +31,13 @@ def compute_bleu_scores(candidate_list, reference_list, avg=False):
         return bleu_scores
 
 
-def calculate_rouge(candidate, reference):
-    rouge = Rouge()
-    '''
-    candidate, reference: generated and ground-truth sentences
-    '''
-    scores = rouge.get_scores([candidate], reference)
-    return scores
+# def calculate_rouge(candidate, reference):
+#     rouge = Rouge()
+#     '''
+#     candidate, reference: generated and ground-truth sentences
+#     '''
+#     scores = rouge.get_scores([candidate], reference)
+#     return scores
 
 def brevity_penalty(candidate, references):
     c = len(candidate)
@@ -127,7 +127,7 @@ def calculate_exactmatch(candidate, reference):
         return count / total
 
 #F1
-def calculate_f1score(candidate, reference):
+def calculate_prf_score(candidate, reference):
     candidate_words = split_sentence(candidate, 1)
     reference_words = split_sentence(reference, 1)
     word_set = set()
@@ -157,4 +157,4 @@ def calculate_f1score(candidate, reference):
         if tp == 0:
             return 0
         else:
-            return 2 * precision * recall / (precision + recall)
+            return precision, recall, 2 * precision * recall / (precision + recall)

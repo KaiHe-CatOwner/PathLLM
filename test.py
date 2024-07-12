@@ -9,8 +9,7 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
-from utils.my_trainer import CustomTrainer
-from utils.utils import my_compute_metrics,seed_everything
+from utils.utils import seed_everything
 from typing import Optional
 from rouge import Rouge
 from dataclasses import dataclass, field
@@ -80,7 +79,7 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<|Question|>',  '<|Answer|>', '<|Image|>']  # 你要添加的特殊字符列表
+new_tokens = ['<Question>',  '<Answer>', '<Image>']  # 你要添加的特殊字符列表
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)

@@ -120,13 +120,14 @@ class MyDataCollatorForQFormerPatchPretrain(DataCollatorMixin):
 
 @dataclass
 class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrain):
-    image_processor: Any
     tokenizer: PreTrainedTokenizerBase
+    image_processor: Any
     mlm: bool = False
     mlm_probability: float = 0.15
     pad_to_multiple_of: Optional[int] = None
     tf_experimental_compile: bool = False
     return_tensors: str = "pt"
+    test: bool = False
         
     def pad_token_id_list(self, input_id_list, padding_value=0):
         """
@@ -152,6 +153,7 @@ class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrai
         patch_list = []
         num_list = []
         input_id_list = []
+        text_list = []
         attention_mask_list = []
         text_input_list = []
 
@@ -167,7 +169,9 @@ class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrai
             input_id_list.append(d["input_ids"])
             attention_mask_list.append(d["attention_mask"])
             text_input_list.append(d["text_input"])
-            # del d["text"]
+            if self.test:
+                text_list.append(d["text"])
+                del d["text"]
             del d["text_input"]
         # if isinstance(examples[0], Mapping):
         #     batch = pad_without_fast_tokenizer_warning(
@@ -191,6 +195,8 @@ class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrai
             labels[labels == self.tokenizer.pad_token_id] = -100
 
         # batch = {"text": text_list}
+        if self.test:
+            batch["text"] = text_list
         batch["text_input"] = text_input_list
         batch["labels"] = labels
         batch["image"] = torch.stack(patch_list)
@@ -249,7 +255,64 @@ class MyDataCollatorForPPathVLM(MyDataCollatorForQFormerPatchInstruct):
         batch["patch_num"] = num_list
         return batch
     
+@dataclass
+class MyDataCollatorForPPathVLMTest(MyDataCollatorForPPathVLM):
+    tokenizer: PreTrainedTokenizerBase
+    image_processor: Any
+    mlm: bool = False
+    mlm_probability: float = 0.15
+    pad_to_multiple_of: Optional[int] = None
+    tf_experimental_compile: bool = False
+    return_tensors: str = "pt"
 
+    def __post_init__(self): 
+        if self.mlm and self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
+                "You should pass `mlm=False` to train on causal language modeling instead."
+            )
+        
+    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        
+        patch_list = []
+        num_list = []
+        ans_list = []
+        input_id_list = []
+        attention_mask_list = []
+
+        for d in examples:
+            image = self._resize_image(d["image"])
+            patches = self._crop_image(image) # [448x448]
+            # print(patches)
+            patches = [self.image_processor(patch) for patch in patches] # [448x448]
+            # patches = self.image_processor(d["image"]) 
+            # print(patches)
+            patch_list += patches
+            num_list.append(len(patches))
+            del d["image"]
+
+        for d in examples:
+            ans_list.append(d["answer"])
+            input_id_list.append(d["input_ids"])
+            attention_mask_list.append(d["attention_mask"])
+            del d["answer"]
+        
+        input_id_list = self.pad_token_id_list(input_id_list, self.tokenizer.pad_token_id)
+        attention_mask_list = self.pad_token_id_list(attention_mask_list, 0)
+
+        batch = {"input_ids": torch.tensor(input_id_list)}
+        batch["attention_mask"] = torch.tensor(attention_mask_list)
+        
+        labels = batch["input_ids"].clone()
+        if self.tokenizer.pad_token_id is not None:
+            labels[labels == self.tokenizer.pad_token_id] = -100
+
+        # batch = {"text": text_list}
+        batch["labels"] = labels
+        batch["image"] = torch.stack(patch_list)
+        batch["patch_num"] = num_list
+        batch["answers"] = ans_list
+        return batch
 
 @dataclass
 class MyDataCollatorForWPathVLM(DataCollatorMixin):

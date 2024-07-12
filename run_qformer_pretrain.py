@@ -36,7 +36,7 @@ class ScriptArguments:
     # data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
     dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/TextbookQAPair", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap,CNX-PathLLM/TextbookQAPair,CNX-PathLLM/PVQAClean"})
-    dataset_local_paths: Optional[str] = field(default="/home/z/zeyugao/dataset/YoutubePathQA/pretrain_data_all", metadata={"help": "the local path for some datasets"})
+    dataset_local_paths: Optional[str] = field(default=None, metadata={"help": "the local path for some datasets"})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     data_cache_dir: Optional[str] = field(default="~/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
     
@@ -44,7 +44,7 @@ class ScriptArguments:
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
-    save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps between two checkpoint saves"})
+    save_steps: Optional[int] = field(default=1, metadata={"help": "Number of updates steps between two checkpoint saves"})
     save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -105,10 +105,11 @@ for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = one_dataset.map(formatting_func, num_proc=4, remove_columns=['txt','__key__', '__url__'])
     dataset.append(one_dataset)
 
-for dataset_name in script_args.dataset_local_paths.split(","):
-    one_dataset = load_from_disk(dataset_name)
-    one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
-    dataset.append(one_dataset)
+if script_args.dataset_local_paths is not None:
+    for dataset_name in script_args.dataset_local_paths.split(","):
+        one_dataset = load_from_disk(dataset_name)
+        one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
+        dataset.append(one_dataset)
 
 dataset = concatenate_datasets(dataset)
 train_dataset = dataset

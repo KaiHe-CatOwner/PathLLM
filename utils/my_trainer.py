@@ -1,13 +1,15 @@
+import os
 import dataclasses
 import inspect
 import warnings
 from functools import wraps
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union, final
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
 from accelerate.state import PartialState
 import datasets
+from model.qformer import Blip2QformerPatch
 from datasets import Dataset
 from datasets.arrow_writer import SchemaInferenceError
 from datasets.builder import DatasetGenerationError
@@ -46,6 +48,25 @@ if is_peft_available():
     from peft import PeftConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
 
 
+def maybe_zero_3(param, ignore_status=False, name=None):
+    from deepspeed import zero
+    from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+    if hasattr(param, "ds_id"):
+        if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
+            if not ignore_status:
+                print(name, 'no ignore status')
+        with zero.GatheredParameters([param]):
+            param = param.data.detach().cpu().clone()
+    else:
+        param = param.detach().cpu().clone()
+    return param
+
+
+def get_mm_adapter_state_maybe_zero_3(named_params, keys_to_match):
+    # to_return = {k: t for k, t in named_params if any(key_match in k for key_match in keys_to_match)}
+    to_return = {k: t for k, t in named_params if not any(key_match in k for key_match in keys_to_match)}
+    to_return = {k: maybe_zero_3(v, ignore_status=True, name=k).cpu() for k, v in to_return.items()}
+    return to_return
 
 class CustomTrainer(Trainer):
     def __init__(
@@ -445,6 +466,27 @@ class CustomTrainer(Trainer):
             self._eval_dataloader = eval_dataloader
 
         return self.accelerator.prepare(eval_dataloader)
+
+    # @final
+    # def _save_checkpoint(self, model, trial, metrics=None):
+
+    #     # if isinstance(model, Blip2QformerPatch):
+    #     super(CustomTrainer, self)._save_checkpoint(model, trial, metrics)
+
+    #     from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+    #     checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+
+    #     run_dir = self._get_output_dir(trial=trial)
+    #     output_dir = os.path.join(run_dir, checkpoint_folder)
+
+    #     # Only save Adapter, filter out the vision encoder and llm
+    #     keys_to_match = ['vision_encoder', 'llm']
+
+    #     weight_to_save = get_mm_adapter_state_maybe_zero_3(self.model.named_parameters(), keys_to_match)
+
+    #     if self.args.local_rank == 0 or self.args.local_rank == -1:
+    #         # self.model.config.save_pretrained(output_dir)
+    #         torch.save(weight_to_save, os.path.join(output_dir, f'resampler.bin'))
 
     def compute_loss(self, model, inputs, return_outputs=False):
         if self.label_smoother is not None and "labels" in inputs:

@@ -174,19 +174,35 @@ class PPathVLM(nn.Module):
                 max_length=100,
                 temperature=1.0,
                 top_k=50,
-                top_p=0.95,
+                top_p=1.0,
                 num_return_sequences=1,
-                repetition_penalty=1.1,
+                repetition_penalty=1.0,
                 do_sample=True,
                 pad_token_id=self.llm_tokenizer.eos_token_id,
                 bos_token_id=self.llm_tokenizer.bos_token_id,
             )
         
         with torch.no_grad():
-            input_ids = kwargs["input_ids"]
             image = kwargs["image"]
-            attention_mask = kwargs["attention_mask"]
-            fusion_embs = self.get_fusion_embedding(input_ids, image)
+            p_num = kwargs["patch_num"]
+            input_ids = kwargs["input_ids"].to(image.device) # ids for text_output
+            attention_mask = kwargs["attention_mask"].to(image.device) # attention mask for text_output
+
+            with torch.inference_mode():
+                if self.clip_name == 'uni':
+                    image_embeds = self.vision_encoder(image)
+                elif self.clip_name == 'conch':
+                    image_embeds = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+                else: 
+                    image_embeds = self.vision_encoder.encode_image(image, normalize=False)[0] # no proj_contrast=False for clip
+
+            image_embeds, image_atts = self._split_and_pad(image_embeds, p_num)
+
+            image_embeds = image_embeds.to(image.device)# .to(torch.bfloat16)# batch x max_length x 512
+            image_atts = image_atts.to(image.device) # batch x max_length
+            attention_mask = torch.cat([image_atts, attention_mask], dim=1)
+        
+            fusion_embs = self.get_fusion_embedding(input_ids, image_embeds)
             attention_mask = self.pad_attention_fusion(fusion_embs.size(1), attention_mask)
             res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=attention_mask, generation_config=generation_config)
 
@@ -217,7 +233,6 @@ class PPathVLM(nn.Module):
         paded_seq = torch.cat((generated_pad, labels), dim=1)
 
         return paded_seq
-
 
     def get_fusion_embedding(self, input_ids, image_embs):
         token_embs = self.embedding_layer(input_ids)

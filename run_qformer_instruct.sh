@@ -25,6 +25,7 @@ accelerate launch --config_file=./accelerate_configs/deepspeed_zero2.yaml run_qf
         --llm_name meta-llama/Meta-Llama-3-8B-Instruct --clip_name conch --bert_name microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext\
         --dataset_name_list CNX-PathLLM/Pathcap,CNX-PathLLM/PubMedPath,CNX-PathLLM/TwitterPath,CNX-PathLLM/CleanedTextData\
         --data_cache_dir ~/.cache\
+        # --ckpt ~/PathLLM/output/Conch_Bert_PatchPre/ckpt_5000.bin\
         # --dataset_local_paths /home/shared/su123/YoutubePathQA/pretrain_data_all 
         # --ckpt ~/PathLLM/output/Conch_Bert_PatchPre/ckpt_5000.bin\
 

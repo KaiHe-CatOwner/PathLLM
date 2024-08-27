@@ -3,6 +3,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 import torch
 import ast
+import re
 from glob import glob
 from tqdm import tqdm
 import pandas as pd
@@ -47,39 +48,8 @@ class ScriptArguments:
     # eval
     batch_size: Optional[int] = field(default=16, metadata={"help": "batch_size"})
     test_img_dir: Optional[str] = field(default='/bask/homes/a/asiw9691/PathVLM/source/PathLLM/test_images/*.jpeg', metadata={"help": "test sample images dic"})
-    ckpt_path: Optional[str] = field(default="/bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/Conch_Llama3_Patch_ITDes/ckpt1000.bin", metadata={"help": "ckpt path"})
+    ckpt_path: Optional[str] = field(default="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/output/Conch_Llama3_Patch_VQA/ckpt10500.bin", metadata={"help": "ckpt path"})
 
-def test_some_samples(test_image_dir, model, data_collator, tokenizer):
-    # test several sample images
-
-    image_paths = glob(test_image_dir)
-
-    patch_list = []
-    num_list = []
-    text_list = []
-
-    for image_path in image_paths:
-        image = Image.open(image_path)
-        image = data_collator._resize_image(image)
-        patches = data_collator._crop_image(image) # [448x448]
-        patches = [model.image_processor(patch) for patch in patches]
-        num_list.append(len(patches))
-        patch_list += patches
-        text_list.append(f"<DES>")
-
-    patch_list = torch.stack(patch_list) # [448x448]
-        
-    input_dic = tokenizer(text_list, return_tensors="pt")
-    input_dic["image"] = patch_list
-    input_dic["patch_num"] = num_list
-
-    res = model.generate(input_ids=input_dic["input_ids"].to(device),
-                     attention_mask=input_dic["attention_mask"].to(device),
-                     patch_num=input_dic["patch_num"],
-                     image=input_dic["image"].to(device))
-    
-    for i in range(len(res)):
-        print("Description for {}: {} \n".format(image_paths[i], res[i]))
 
 def setup_tokenizer(script_args):
     # set up tokenizer
@@ -94,39 +64,54 @@ def setup_tokenizer(script_args):
     print("new_tokens_ids: ", new_tokens_ids)
     return tokenizer, new_tokens_ids
 
-def formatting_func_itp(examples):
-    answer = examples["txt"]
-    text = f"<DES>"
-    examples["text"] = text
+parser = HfArgumentParser(ScriptArguments)
+script_args = parser.parse_args_into_dataclasses()[0]
+seed_everything(script_args.seed)
+tokenizer, new_tokens_ids = setup_tokenizer(script_args)
+
+
+def formatting_func_pathvqa(examples):
+    question = examples["question"]
+    answer = examples["answer"]
+    question = question.replace("<image>\n", "")
+    question = question.replace("<image>", "")
+    if answer in ["yes","no"]:
+        examples["answer_type"] = "CLOSED"
+        # question += " answer yes or no directly!"
+    else:
+        examples["answer_type"] = "OPEN"
+    text = f"<Question> {question}{tokenizer.eos_token}" # + f"<Answer>"
     examples["answer"] = answer
+    examples["text"] = text
     return examples
 
-def formatting_func_ytb(examples):
-    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
-    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
-    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
-    text = f"<DES>"
-    examples["text"] = text
+def formatting_func_quiltvqa(examples):
+    question = examples["question"]
+    answer = examples["answer"]
+    # if examples["answer_type"] == "CLOSED":
+        # question += " answer yes or no directly!"
+    text = f"<Question> {question}{tokenizer.eos_token}" # + f"<Answer>"
     examples["answer"] = answer
+    examples["text"] = text
     return examples
 
 def setup_datasets(script_args):
 # set up datasets
-    train_dataset = []
-    eval_dataset = []
+    dataset_quilt = load_dataset("wisdomik/Quilt_VQA", split="train", cache_dir=script_args.data_cache_dir)
+    dataset_quilt = dataset_quilt.map(formatting_func_quiltvqa, num_proc=4, remove_columns=["question", "context"])
+    closed_dataset_quilt = dataset_quilt.filter(lambda example: example['answer_type'] == 'CLOSED').remove_columns('answer_type')
+    open_dataset_quilt = dataset_quilt.filter(lambda example: example['answer_type'] == 'OPEN').remove_columns('answer_type')
 
-    for dataset_name in script_args.dataset_name_list.split(","):
-        one_dataset = load_dataset(dataset_name, split="train", cache_dir=script_args.data_cache_dir)
-        one_dataset = one_dataset.rename_column('jpg', 'image')
-        one_dataset = one_dataset.map(formatting_func_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
-        one_dataset = one_dataset.train_test_split(test_size=0.01)
-        train_dataset.append(one_dataset['train'])
-        eval_dataset.append(one_dataset['test'])
+    dataset_pvqa = load_dataset("CNX-PathLLM/PVQAClean", split="train", cache_dir=script_args.data_cache_dir)
+    dataset_pvqa = dataset_pvqa.map(formatting_func_pathvqa, num_proc=4, remove_columns=["question"])
+    closed_dataset_pvqa = dataset_pvqa.filter(lambda example: example['answer_type'] == 'CLOSED').remove_columns('answer_type')
+    open_dataset_pvqa = dataset_pvqa.filter(lambda example: example['answer_type'] == 'OPEN').remove_columns('answer_type')
 
-    train_dataset = concatenate_datasets(train_dataset)
-    eval_dataset = concatenate_datasets(eval_dataset)
+    dataset = [closed_dataset_quilt, open_dataset_quilt, closed_dataset_pvqa, open_dataset_pvqa]
 
-    return train_dataset, eval_dataset
+    dataset_name = ['closed_dataset_quilt','open_dataset_quilt','closed_dataset_pvqa','open_dataset_pvqa']
+
+    return dataset, dataset_name
 
 def setup_model(script_args):
     model = PPathVLM(llm_requires_grad = script_args.llm_requires_grad, 
@@ -163,7 +148,7 @@ def setup_dataloader(dataset, tokenizer, data_collator, script_args):
 
     return dataloader
 
-def predict_and_save_openEnded(eval_dataloader, model, script_args):
+def predict_and_save_open_ended(eval_dataloader, model, script_args):
     # todo CIDEr and SPICE
     open_ques_pre = []
     open_ques_rec = []
@@ -174,7 +159,7 @@ def predict_and_save_openEnded(eval_dataloader, model, script_args):
 
     total_batches = len(eval_dataloader)
 
-    N = 100 # total_batches
+    N = total_batches
 
     for i, batch in enumerate(tqdm(eval_dataloader)):
         if i >= N:
@@ -210,36 +195,128 @@ def predict_and_save_openEnded(eval_dataloader, model, script_args):
         
     open_bleu_score = compute_bleu_scores(open_candidate, open_reference, avg=True)
     open_cider_score = compute_cider_scores(open_candidate, open_reference)
-    open_spice_score = compute_spice_scores(open_candidate, open_reference)
+    # open_spice_score = compute_spice_scores(open_candidate, open_reference)
 
     open_ques_pre = np.mean(open_ques_pre)
     open_ques_rec = np.mean(open_ques_rec)
     open_ques_f1 = np.mean(open_ques_f1)
 
+    print("open question macro f1_score: {}\n".format(open_ques_f1))
+    print("open question macro precision: {}\n".format(open_ques_pre))
+    print("open question macro recall: {}\n".format(open_ques_rec))
+    print("open question bleu score: {}\n".format(open_bleu_score))
+    print("open question cider score: {}\n".format(open_cider_score))
+    # print("open question spice score: {}\n".format(open_spice_score))
+
     output_path = script_args.ckpt_path.replace('.bin', '.txt')
 
-    with open(output_path, 'w') as file:
+    with open(output_path, 'a') as file:
         file.write("open question macro f1_score: {}\n".format(open_ques_f1))
         file.write("open question macro precision: {}\n".format(open_ques_pre))
         file.write("open question macro recall: {}\n".format(open_ques_rec))
         file.write("open question bleu score: {}\n".format(open_bleu_score))
         file.write("open question cider score: {}\n".format(open_cider_score))
-        file.write("open question spice score: {}\n".format(open_spice_score))
+        # file.write("open question spice score: {}\n".format(open_spice_score))
 
     print("Results have been written to {}".format(output_path))
 
-if __name__ == "__main__":
-    parser = HfArgumentParser(ScriptArguments)
-    script_args = parser.parse_args_into_dataclasses()[0]
-    seed_everything(script_args.seed)
-    _, eval_dataset = setup_datasets(script_args)
+def predict_and_save_close_ended(eval_dataloader, model, script_args):
+    total_num = 0
+    correct_num = 0
+    close_candidate = []
+    close_reference = []
 
-    tokenizer, new_tokens_ids = setup_tokenizer(script_args)
-    model = setup_model(script_args)
-    data_collator = MyDataCollatorForPPathVLMTest(tokenizer=tokenizer, image_processor=model.image_processor)
+    total_batches = len(eval_dataloader)
 
-    eval_dataloader = setup_dataloader(eval_dataset, tokenizer, data_collator, script_args)
-    # visualize some answers for samples
-    test_some_samples(script_args.test_img_dir, model, data_collator, tokenizer)
+    N = total_batches
 
-    predict_and_save_openEnded(eval_dataloader, model, script_args)
+    for i, batch in enumerate(tqdm(eval_dataloader)):
+        if i >= N:
+            break
+
+    # for batch in tqdm(eval_dataloader):
+
+        input_ids = batch['input_ids'].to(device)
+        attention_masks = batch['attention_mask'].to(device)
+        images = batch['image'].to(device)
+        answers = batch['answers']
+        p_num = batch["patch_num"]
+
+        # 执行模型推断
+        res = model.generate(input_ids=input_ids,
+                            attention_mask=attention_masks,
+                            patch_num=p_num,
+                            image=images)
+        
+        for i in range(len(answers)):
+                if  len(split_sentence(answers[i], 1)) == 0:
+                    continue
+                close_candidate.append(res[i])
+                close_reference.append(answers[i])
+
+
+    # calculate accuracy for close ended problem
+    for i in range(len(close_reference)):
+        first_word_ref = re.findall(r'\b\w+\b', close_reference[i])[0].lower()
+        first_word_cand = re.findall(r'\b\w+\b', close_candidate[i])[1].lower()
+        if first_word_cand in ['yes','no'] and first_word_ref in ['yes','no']:
+            total_num += 1
+            if first_word_cand == first_word_ref:
+                correct_num += 1
+
+    acc = correct_num/total_num
+
+    print("closed question accuracy: {}\n".format(acc))
+
+    output_path = script_args.ckpt_path.replace('.bin', '.txt')
+
+    with open(output_path, 'a') as file:
+        file.write("closed question accuracy: {}\n".format(acc))
+
+    print("Results have been written to {}".format(output_path))
+
+def test_some_samples(test_image_dir, model, data_collator, tokenizer):
+    # test several sample images
+
+    image_paths = glob(test_image_dir)
+
+    patch_list = []
+    num_list = []
+    text_list = []
+
+    for image_path in image_paths:
+        image = Image.open(image_path)
+        image = data_collator._resize_image(image)
+        patches = data_collator._crop_image(image) # [448x448]
+        patches = [model.image_processor(patch) for patch in patches]
+        num_list.append(len(patches))
+        patch_list += patches
+        text_list.append(f"<Question> What is the final pathological diagnosis for this image?")
+
+    patch_list = torch.stack(patch_list) # [448x448]
+        
+    input_dic = tokenizer(text_list, return_tensors="pt")
+    input_dic["image"] = patch_list
+    input_dic["patch_num"] = num_list
+
+    res = model.generate(input_ids=input_dic["input_ids"].to(device),
+                     attention_mask=input_dic["attention_mask"].to(device),
+                     patch_num=input_dic["patch_num"],
+                     image=input_dic["image"].to(device))
+    
+    for i in range(len(res)):
+        print("{}: {} \n".format(image_paths[i], res[i]))
+
+dataset, dataset_name = setup_datasets(script_args)
+model = setup_model(script_args)
+data_collator = MyDataCollatorForPPathVLMTest(tokenizer=tokenizer, image_processor=model.image_processor)
+
+for i in range(len(dataset)):
+    eval_dataloader = setup_dataloader(dataset[i], tokenizer, data_collator, script_args)
+    if 'open' in dataset_name[i]:
+        predict_and_save_open_ended(eval_dataloader, model, script_args)
+    else:
+        predict_and_save_close_ended(eval_dataloader, model, script_args)
+
+# visualize some answers for samples
+test_some_samples(script_args.test_img_dir, model, data_collator, tokenizer)

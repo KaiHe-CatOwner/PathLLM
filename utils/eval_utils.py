@@ -5,6 +5,35 @@ import math
 import numpy as np
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 
+from pycocoevalcap.cider.cider import Cider
+from pycocoevalcap.spice.spice import Spice
+
+def create_input_format(candidates, references):
+    gts = {}
+    res = {}
+    
+    for i in range(len(candidates)):
+        image_id = f'image_{i+1}'
+        
+        gts[image_id] = [references[i]]
+        res[image_id] = [candidates[i]]
+    
+    return gts, res
+
+def compute_cider_scores(candidate_list, reference_list):
+    cider_scorer = Cider()
+
+    gts, res = create_input_format(candidate_list, reference_list)
+    score, _ = cider_scorer.compute_score(gts, res)
+    return score
+
+def compute_spice_scores(candidate_list, reference_list):
+    spice_scorer = Spice()
+
+    gts, res = create_input_format(candidate_list, reference_list)
+    score, _ = spice_scorer.compute_score(gts, res)
+    return score
+
 def compute_bleu_scores(candidate_list, reference_list, avg=False):
     bleu_scores = []
     smoothie = SmoothingFunction().method1
@@ -148,13 +177,13 @@ def calculate_prf_score(candidate, reference):
             fn += reference_words[word]
     
     if len(candidate_words) == 0:
-        return "0 (warning: length of candidate's words is 0)"
+        return 0 ,0, 0
     elif len(reference_words) == 0:
-        return 0
+        return 0 ,0, 0
     else:
         precision = tp / (tp + fp)
         recall = tp / (tp + fn)
         if tp == 0:
-            return 0
+            return precision, recall, 0
         else:
             return precision, recall, 2 * precision * recall / (precision + recall)

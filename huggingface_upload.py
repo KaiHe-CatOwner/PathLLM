@@ -14,8 +14,10 @@ def load_and_merge_datasets(directories):
     return merged_dataset
 
 # 示例数据集目录列表
-data_directories = ["/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part0", "/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part1",
-                     "/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part2", "/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part3"]
+data_directories = ["/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part0", 
+                    "/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part1",
+                    "/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part2", 
+                    "/bask/projects/p/phwq4930-gbm/Zeyu/WSI_Dataset/WVLMdata_part3"]
 
 # 读取并合并数据集
 merged_dataset = load_and_merge_datasets(data_directories)

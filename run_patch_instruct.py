@@ -117,7 +117,7 @@ def formatting_func_vmc(examples): # image conversations
         if sentence['from'] == 'human':
             text += f"<Question> {sentence['value']}{tokenizer.eos_token}"
         elif sentence['from'] == 'gpt':
-            text += f"<Answer> {sentence['value']}{tokenizer.eos_token}"
+            text += f"<Answer> {sentence['value']}{tokenizer.eos_token}\n"
     examples["text"] = text
     return examples
 

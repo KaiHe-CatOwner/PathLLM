@@ -95,19 +95,9 @@ print("new_tokens_ids: ", new_tokens_ids)
 questions = pd.read_csv('./utils/question_list.csv', header=None)  
 questions = questions[0].tolist()
 
-def formatting_func_itp(examples):
-    question = random.choice(questions)
-    answer = examples["txt"]
-    text = f"<Question> {question}{llm_tokenizer.eos_token} " + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
-    examples["text_input"] = question
-    examples["text"] = text
-    return examples
-
 def formatting_func_vqap(examples):
     question = examples["question"]
     answer = examples["answer"]
-    if answer in ["yes","no"]:
-        question += "Answer yes or no only!"
     question = question.replace("<image>\n", "")
     question = question.replace("<image>", "")
     text = f"<Question> {question}{llm_tokenizer.eos_token}" + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
@@ -115,9 +105,17 @@ def formatting_func_vqap(examples):
     examples["text"] = text
     return examples
 
+def formatting_func_ytb(examples):
+    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
+    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
+    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
+    text = f"<Question> {question}{llm_tokenizer.eos_token}" + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
+    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
+    examples["text_input"] = question
+    examples["text"] = text
+    return examples
+
 # CNX-PathLLM/MultiConversation
-# [{'from': 'human', 'value': 'What are the key features of this image that suggest chronic pancreatitis?'},
-# {'from': 'gpt', 'value': 'The presence of duct dilatation, fibrosis, and pancreatic tissue necrosis are indicative of chronic pancreatitis.}]
 def formatting_func_vmc(examples): # image conversations
     conversation = examples["conversations"]
     conversation = ast.literal_eval(conversation)
@@ -130,8 +128,8 @@ def formatting_func_vmc(examples): # image conversations
             text += f"<Question> {sentence['value']}{llm_tokenizer.eos_token}"
             question += sentence['value']
         elif sentence['from'] == 'gpt':
-            text += f"<Answer> {sentence['value']}{llm_tokenizer.eos_token}"
-    # examples["text_input"] = question
+            text += f"<Answer> {sentence['value']}{llm_tokenizer.eos_token}\n"
+    examples["text_input"] = question
     examples["text"] = text
     return examples
 
@@ -149,23 +147,27 @@ if script_args.select_data_num>0:
     split_text = "train[:{}]".format(script_args.select_data_num)
 else:
     split_text = "train"
+    
 
-dataset = []
-eval_dataset = None
+train_dataset = []
+eval_dataset = []
 
 for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
-    one_dataset = one_dataset.rename_column('jpg', 'image')
-    one_dataset = one_dataset.map(formatting_func_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
-    dataset.append(one_dataset)
+    if dataset_name in ["CNX-PathLLM/Pathinstruct", "CNX-PathLLM/TextbookQAPair"]:
+        one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
+    elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
+        one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
+    elif dataset_name in ["CNX-PathLLM/YoutubeInstruct"]:
+        one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
+    train_dataset.append(one_dataset)
 
-for dataset_name in script_args.dataset_local_paths.split(","):
-    one_dataset = load_from_disk(dataset_name)
-    one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
-    dataset.append(one_dataset)
+train_dataset = concatenate_datasets(train_dataset)
 
-dataset = concatenate_datasets(dataset)
-train_dataset = dataset
+if eval_dataset == []:
+    eval_dataset = None
+else:
+    eval_dataset = concatenate_datasets(eval_dataset)
 
 model = Blip2QformerPathInstruct(
                                     clip_name = script_args.clip_name,
@@ -182,6 +184,7 @@ model = Blip2QformerPathInstruct(
                                     image_token_id = new_tokens_ids[-1],
                                     data_cache_dir = script_args.data_cache_dir
                                 )
+
 if script_args.ckpt_path is not None:
     model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device), strict=False)
     model = model.to(torch.bfloat16)

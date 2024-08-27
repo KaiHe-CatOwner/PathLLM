@@ -24,7 +24,7 @@ export WANDB_MODE=online
 export TORCH_DISTRIBUTED_DEFAULT_TIMEOUT=600
 
 accelerate launch --config_file=./accelerate_configs/deepspeed_zero2.yaml run_patch.py --max_steps 20_000\
-        --gpu 3 --train_batch_size 6 --eval_batch_size 2 --max_seq_length 256 --resume_from_checkpoint False\
+        --gpu 3 --train_batch_size 6 --eval_batch_size 2 --max_seq_length 256 --resume_from_checkpoint True\
         --output_dir /home/shared/su123/LLM_ckpt/Conch_Llama3_Patch_VQA\
         --llm_name meta-llama/Meta-Llama-3-8B-Instruct --clip_name conch --data_cache_dir ~/.cache\
         --dataset_name_list CNX-PathLLM/Pathinstruct,CNX-PathLLM/TextbookQAPair,CNX-PathLLM/MultiConversation,CNX-PathLLM/YoutubeInstruct\

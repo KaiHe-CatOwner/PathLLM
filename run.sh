@@ -12,7 +12,7 @@
 #SBATCH -e ./logs/slurm.%N.%j.err # STDERR
 
 module purge
-# module load bask-apps/live
+module load bask-apps/live
 module load GCCcore/11.3.0 Python/3.10.4
 module load CUDA/11.8.0
 module load cuDNN/8.7.0.84-CUDA-11.8.0

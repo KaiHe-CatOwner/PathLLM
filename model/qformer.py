@@ -68,7 +68,9 @@ class Blip2QformerPatch(Blip2Base):
 
         self.vision_encoder, self.image_processor, self.img_embed_dim = self.load_vision_encoder() # LayerNorm is already done by conch
 
-        self.vision_encoder.requires_grad = False
+        for param in self.vision_encoder.parameters():
+            param.requires_grad = False
+
         self.vision_encoder = self.vision_encoder.eval()
 
         self.tokenizer = init_tokenizer(pretrain_name=pretrain_name) 
@@ -358,7 +360,10 @@ class Blip2QformerPathInstruct(Blip2QformerPatch):
 
         self.vision_encoder, self.image_processor, self.img_embed_dim = self.load_vision_encoder() # LayerNorm is already done by conch
 
-        self.vision_encoder.requires_grad = False
+        # Freeze the vision_encoder parameters
+        for param in self.vision_encoder.parameters():
+            param.requires_grad = False
+            
         self.vision_encoder = self.vision_encoder.eval()
 
         self.bert_tokenizer = init_tokenizer(pretrain_name=pretrain_name) 
@@ -386,8 +391,11 @@ class Blip2QformerPathInstruct(Blip2QformerPatch):
         
         self.config = self.llm.config
         self.image_token_id = image_token_id
-        self.llm.requires_grad = llm_requires_grad
         self.max_txt_len = max_txt_len
+
+        # Control whether the LLM parameters are trainable
+        for param in self.llm.parameters():
+            param.requires_grad = llm_requires_grad
 
 
     def load_llm(self, load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token):

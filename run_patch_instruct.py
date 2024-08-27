@@ -11,7 +11,7 @@ from utils.utils import my_compute_metrics, seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
 from model.my_model import PPathVLM
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model
 from datasets import load_dataset, concatenate_datasets
 from utils.data_collator import MyDataCollatorForPPathVLM
 device = "cuda"
@@ -69,7 +69,7 @@ class ScriptArguments:
     push_to_hub: Optional[bool] = field(default=False, metadata={"help": "Push the model to HF Hub"})
     hub_model_id: Optional[str] = field(default="mistral-7b-finetuned-ultrachat", metadata={"help": "The name of the model on HF Hub"})
     use_peft: Optional[bool] = field(default=False, metadata={"help": "Wether to use PEFT or not to train adapters"})
-    peft_lora_r: Optional[int] = field(default=64, metadata={"help": "the r parameter of the LoRA adapters"})
+    peft_lora_r: Optional[int] = field(default=32, metadata={"help": "the r parameter of the LoRA adapters"})
     peft_lora_alpha: Optional[int] = field(default=16, metadata={"help": "the alpha parameter of the LoRA adapters"})
 
 parser = HfArgumentParser(ScriptArguments)
@@ -141,11 +141,6 @@ eval_dataset = []
 
 for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
-    # if dataset_name in ["CNX-PathLLM/PVQAClean"]:
-    #     one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
-    #     one_dataset = one_dataset.train_test_split(test_size=0.1)
-    #     eval_dataset = one_dataset['test']
-    #     one_dataset = one_dataset['train']
     if dataset_name in ["CNX-PathLLM/Pathinstruct", "CNX-PathLLM/TextbookQAPair"]:
         one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
     elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
@@ -174,6 +169,9 @@ model = PPathVLM(script_args.llm_requires_grad,
                 tokenizer,
                 new_tokens_ids[-1],
                 script_args.data_cache_dir)
+
+model.print_parameter_counts()
+model.print_llm_parameters()
 
 if script_args.ckpt_path is not None:
     model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device), strict=False)
@@ -211,7 +209,10 @@ if script_args.use_peft:
         lora_alpha=script_args.peft_lora_alpha,
         bias="none",
         task_type="CAUSAL_LM",
+        # target_modules=["llm"],
     )
+    model.llm = get_peft_model(model.llm, peft_config)
+    model.llm.print_trainable_parameters()
 else:
     peft_config = None
 
@@ -226,7 +227,7 @@ trainer = CustomTrainer(
     eval_dataset=eval_dataset,
     dataset_num_proc = 20,
     dataset_text_field=script_args.dataset_text_field,
-    peft_config=peft_config,
+    peft_config=None,
     tokenizer=tokenizer,
     data_collator=data_collator,
     compute_metrics=my_compute_metrics,

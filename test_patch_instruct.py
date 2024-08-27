@@ -43,12 +43,12 @@ class ScriptArguments:
     dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathcap,CNX-PathLLM/PubMedPath,CNX-PathLLM/TwitterPath,CNX-PathLLM/CleanedTextData", metadata={"help": ""})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     dataset_local_paths: Optional[str] = field(default=None, metadata={"help": "the local path for some datasets"})
-    data_cache_dir: Optional[str] = field(default="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
+    data_cache_dir: Optional[str] = field(default="/bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
     
     # eval
     batch_size: Optional[int] = field(default=16, metadata={"help": "batch_size"})
     test_img_dir: Optional[str] = field(default='/bask/homes/a/asiw9691/PathVLM/source/PathLLM/test_images/*.jpeg', metadata={"help": "test sample images dic"})
-    ckpt_path: Optional[str] = field(default="/bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/source/PathLLM/output/Conch_Llama3_Patch_VQA/ckpt10500.bin", metadata={"help": "ckpt path"})
+    ckpt_path: Optional[str] = field(default="/bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/source/PathLLM/output/Conch_Llama3_Patch_VQA/ckpt10500.bin", metadata={"help": "ckpt path"})
 
 
 def setup_tokenizer(script_args):
@@ -125,8 +125,14 @@ def setup_model(script_args):
                         image_token_id = new_tokens_ids[-1],
                         data_cache_dir = script_args.data_cache_dir)
 
+    model.print_llm_parameters()
+    model.print_vision_parameters()
+
     model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device))
     model.to(device)
+
+    model.print_llm_parameters()
+    model.print_vision_parameters()
     return model
 
 def setup_dataloader(dataset, tokenizer, data_collator, script_args):

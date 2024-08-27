@@ -60,8 +60,48 @@ class PPathVLM(nn.Module):
         
         self.config = self.llm.config
         self.image_token_id = image_token_id
-        self.vision_encoder.requires_grad = False
-        self.llm.requires_grad = llm_requires_grad
+
+        # Freeze the vision_encoder parameters
+        for param in self.vision_encoder.parameters():
+            param.requires_grad = False
+
+        # Control whether the LLM parameters are trainable
+        for param in self.llm.parameters():
+            param.requires_grad = llm_requires_grad
+
+        # self.vision_encoder.requires_grad = False
+        # self.llm.requires_grad = llm_requires_grad
+
+    def print_parameter_counts(self):
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        
+        print(f"Total number of parameters: {total_params}")
+        print(f"Number of trainable parameters: {trainable_params}")
+
+    def print_llm_parameters(self, num_params=5):
+            """Print a few parameters of the LLM to check requires_grad status."""
+            count = 0
+            for name, param in self.llm.named_parameters():
+                if count >= num_params:
+                    break
+                print(f"Parameter name: {name}")
+                print(f"Parameter requires_grad: {param.requires_grad}")
+                print(f"Parameter value: {param.data.flatten()[:5]}")  # Print first 5 values
+                print("-" * 50)
+                count += 1
+
+    def print_vision_parameters(self, num_params=5):
+            """Print a few parameters of the Vision Encoder to check requires_grad status."""
+            count = 0
+            for name, param in self.vision_encoder.visual.trunk.blocks.named_parameters():
+                if count >= num_params:
+                    break
+                print(f"Parameter name: {name}")
+                print(f"Parameter requires_grad: {param.requires_grad}")
+                print(f"Parameter value: {param.data.flatten()[:5]}")  # Print first 5 values
+                print("-" * 50)
+                count += 1
 
     def _split_and_pad(self, image_embeds, p_num):
         """
@@ -304,7 +344,10 @@ class WPathVLM(PPathVLM):
         
         self.config = self.llm.config
         self.image_token_id = image_token_id
-        self.llm.requires_grad = llm_requires_grad
+
+        # Control whether the LLM parameters are trainable
+        for param in self.llm.parameters():
+            param.requires_grad = llm_requires_grad
 
     def get_wsi_embedding(self, patch_embs, patch_masks, level):
 

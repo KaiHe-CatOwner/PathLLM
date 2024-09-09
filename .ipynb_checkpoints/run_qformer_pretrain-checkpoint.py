@@ -2,18 +2,17 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 import ast
-import torch
 import random
 import pandas as pd
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
-from utils.my_trainer import CustomTrainer
+from utils.my_trainer import QformerTrainer
 from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
-from model.qformer import Blip2QformerPathInstruct
-from peft import LoraConfig, get_peft_model
+from model.qformer import Blip2QformerPatch
+from peft import LoraConfig
 from datasets import load_dataset, load_from_disk, concatenate_datasets
-from utils.data_collator import MyDataCollatorForQFormerPatchInstruct
+from utils.data_collator import MyDataCollatorForQFormerPatchPretrain
 
 @dataclass
 class ScriptArguments:
@@ -27,27 +26,27 @@ class ScriptArguments:
     load_in_4bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 4 bits precision"})
     trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
     token: Optional[bool] = field(default=True, metadata={"help": "Use HF auth token to access the model"})
-    seed: Optional[int] = field(default=2024, metadata={"help": "seed"})
+    seed: Optional[int] = field(default=42, metadata={"help": "seed"})
 
     # model
     llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B, meta-llama/Llama-2-7b-chat-hf "})
-    clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name,  conch / pathclip-base / uni"})
+    clip_name: Optional[str] = field(default="conch", metadata={"help": "the model name，  conch / pathclip-base / uni"})
     bert_name: Optional[str] = field(default="microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext", metadata={"help": "the bert name"})
     
     # data
-    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data, -1 mean use all data"})
+    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
     dataset_name_list: Optional[str] = field(default="CNX-PathLLM/Pathinstruct,CNX-PathLLM/MultiConversation,CNX-PathLLM/TextbookQAPair", metadata={"help": "CNX-PathLLM/PubMedPath,CNX-PathLLM/CleanedTextData,CNX-PathLLM/TwitterPath,CNX-PathLLM/Pathcap,CNX-PathLLM/TextbookQAPair,CNX-PathLLM/PVQAClean"})
-    dataset_local_paths: Optional[str] = field(default="/home/z/zeyugao/dataset/YoutubePathQA/pretrain_data_all", metadata={"help": "the local path for some datasets"})
+    dataset_local_paths: Optional[str] = field(default=None, metadata={"help": "the local path for some datasets"})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     data_cache_dir: Optional[str] = field(default="~/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
-    ckpt_path: Optional[str] = field(default=None, metadata={"help": "ckpt path"})
-
+    
     # log and save model
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
-    save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=2, metadata={"help": "Limits total number of checkpoints."})
+    save_steps: Optional[int] = field(default=1, metadata={"help": "Number of updates steps between two checkpoint saves"})
+    save_total_limit: Optional[int] = field(default=10, metadata={"help": "Limits total number of checkpoints."})
+    
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     
@@ -79,59 +78,17 @@ seed_everything(script_args.seed)
 # os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
-device = 'cuda'
 
-# set up tokenizer
-llm_tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
-llm_tokenizer.pad_token = llm_tokenizer.eos_token
-llm_tokenizer.padding_side = "right"
-llm_tokenizer.truncation_side = 'left'
-
-new_tokens = ['<Question>',  '<Answer>', '<Image>']  
-num_added_toks = llm_tokenizer.add_tokens(new_tokens)
-new_tokens_ids = llm_tokenizer.convert_tokens_to_ids(new_tokens)
-print("new_tokens_ids: ", new_tokens_ids)
-
-questions = pd.read_csv('./utils/question_list.csv', header=None)  
-questions = questions[0].tolist()
-
-def formatting_func_vqap(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    question = question.replace("<image>\n", "")
-    question = question.replace("<image>", "")
-    text = f"<Question> {question}{llm_tokenizer.eos_token}" + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
-    examples["text_input"] = question
-    examples["text"] = text
-    return examples
-
-# CNX-PathLLM/MultiConversation
-def formatting_func_vmc(examples): # image conversations
-    conversation = examples["conversations"]
-    conversation = ast.literal_eval(conversation)
-    question = ""
-    text = ""
-    for sentence in conversation:
-        sentence['value'] = sentence['value'].replace("<image>\n", "")
-        sentence['value'] = sentence['value'].replace("<image>", "")
-        if sentence['from'] == 'human':
-            text += f"<Question> {sentence['value']}{llm_tokenizer.eos_token}"
-            question += sentence['value']
-        elif sentence['from'] == 'gpt':
-            text += f"<Answer> {sentence['value']}{llm_tokenizer.eos_token}\n"
-    examples["text_input"] = question
+def formatting_func(examples):
+    text = examples["txt"]
     examples["text"] = text
     return examples
 
 def formatting_func_ytb(examples):
-    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
-    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
-    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
-    text = f"<Question> {question}{llm_tokenizer.eos_token}" + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
-    examples["text_input"] = question
+    text = examples['conversations']
+    text = ast.literal_eval(text[1:-1].split('\n')[1])['value']
     examples["text"] = text
     return examples
-
 
 if script_args.select_data_num>0:
     split_text = "train[:{}]".format(script_args.select_data_num)
@@ -139,46 +96,30 @@ else:
     split_text = "train"
     
 
-train_dataset = []
-eval_dataset = []
+dataset = []
+eval_dataset = None
 
 for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
-    if dataset_name in ["CNX-PathLLM/Pathinstruct", "CNX-PathLLM/TextbookQAPair"]:
-        one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
-    elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
-        one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
-    elif dataset_name in ["CNX-PathLLM/YoutubeInstruct"]:
+    one_dataset = one_dataset.rename_column('jpg', 'image')
+    one_dataset = one_dataset.map(formatting_func, num_proc=4, remove_columns=['txt','__key__', '__url__'])
+    dataset.append(one_dataset)
+
+if script_args.dataset_local_paths is not None:
+    for dataset_name in script_args.dataset_local_paths.split(","):
+        one_dataset = load_from_disk(dataset_name)
         one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
-    train_dataset.append(one_dataset)
+        dataset.append(one_dataset)
 
-train_dataset = concatenate_datasets(train_dataset)
+dataset = concatenate_datasets(dataset)
+train_dataset = dataset
 
-if eval_dataset == []:
-    eval_dataset = None
-else:
-    eval_dataset = concatenate_datasets(eval_dataset)
-
-model = Blip2QformerPathInstruct(
-                                    clip_name = script_args.clip_name,
-                                    num_query_token = 16,
-                                    cross_attention_freq = 2,
-                                    pretrain_name = script_args.bert_name,
-                                    llm_requires_grad = script_args.llm_requires_grad, 
-                                    load_in_8bit = script_args.load_in_8bit, 
-                                    load_in_4bit = script_args.load_in_4bit, 
-                                    llm_name = script_args.llm_name, 
-                                    trust_remote_code = script_args.trust_remote_code, 
-                                    token = script_args.token, 
-                                    llm_tokenizer = llm_tokenizer,
-                                    image_token_id = new_tokens_ids[-1],
-                                    data_cache_dir = script_args.data_cache_dir
-                                )
-
-if script_args.ckpt_path is not None:
-    model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device), strict=False)
-    model = model.to(torch.bfloat16)
-    print("load qformer from: {}".format(script_args.ckpt_path))
+model = Blip2QformerPatch(clip_name = script_args.clip_name,
+                            num_query_token = 16,
+                            cross_attention_freq = 2,
+                            embed_dim = 256,
+                            pretrain_name = script_args.bert_name,
+                            max_txt_len = 128,)
 
 print("output dir is set to: {}".format(script_args.output_dir))
 
@@ -207,30 +148,26 @@ training_args = TrainingArguments(
 
 if script_args.use_peft:
     peft_config = LoraConfig(
-        r=script_args.peft_lora_r,  # Use a moderate rank
-        lora_alpha=script_args.peft_lora_alpha,  # Scaling factor
-        bias="none",  # No bias adaptation
-        task_type="CAUSAL_LM",  # For causal language modeling tasks
-        # lora_dropout=0.1,  # Use dropout for regularization
-        # target_modules=["q_proj", "v_proj"],  # Focus on key attention components
-        # init_lora_weights="pissa"  # Use random initialization
+        r=script_args.peft_lora_r,
+        lora_alpha=script_args.peft_lora_alpha,
+        bias="none",
+        task_type="CAUSAL_LM",
     )
-    model.llm = get_peft_model(model.llm, peft_config)
-    model.llm.print_trainable_parameters()
 else:
     peft_config = None
 
-data_collator = MyDataCollatorForQFormerPatchInstruct(image_processor=model.image_processor, tokenizer=llm_tokenizer)
 
-trainer = CustomTrainer(
+data_collator = MyDataCollatorForQFormerPatchPretrain(image_processor=model.image_processor, tokenizer=None)
+
+trainer = QformerTrainer(
     model=model,
     args=training_args,
     max_seq_length=script_args.max_seq_length,
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     dataset_text_field=script_args.dataset_text_field,
-    # peft_config=peft_config,
-    tokenizer=llm_tokenizer,
+    peft_config=peft_config,
+    tokenizer=model.tokenizer,
     data_collator=data_collator,
     compute_metrics=my_compute_metrics,
 )

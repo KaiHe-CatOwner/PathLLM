@@ -329,7 +329,6 @@ def predict_and_save_close_ended(eval_dataloader, model, script_args):
     acc = correct_num/total_num
 
     print("closed question accuracy: {}\n".format(acc))
-    print("{} of {} followed the instruction \n".format(len(close_reference), total_num))
 
     output_path = script_args.ckpt_path.replace('.bin', '.txt')
 
@@ -381,7 +380,7 @@ if script_args.adaptor == 'qformer':
 else:
     data_collator = MyDataCollatorForPPathVLMTest(tokenizer=tokenizer, image_processor=model.image_processor)
 
-for i in range(2): # len(dataset)
+for i in range(len(dataset)):
     eval_dataloader = setup_dataloader(dataset[i], tokenizer, data_collator, script_args)
     if 'open' in dataset_name[i]:
         predict_and_save_open_ended(eval_dataloader, model, script_args)

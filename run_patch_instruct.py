@@ -48,7 +48,7 @@ class ScriptArguments:
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
     max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
     save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=5, metadata={"help": "Limits total number of checkpoints."})
+    save_total_limit: Optional[int] = field(default=2, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -69,8 +69,8 @@ class ScriptArguments:
     push_to_hub: Optional[bool] = field(default=False, metadata={"help": "Push the model to HF Hub"})
     hub_model_id: Optional[str] = field(default="mistral-7b-finetuned-ultrachat", metadata={"help": "The name of the model on HF Hub"})
     use_peft: Optional[bool] = field(default=False, metadata={"help": "Wether to use PEFT or not to train adapters"})
-    peft_lora_r: Optional[int] = field(default=32, metadata={"help": "the r parameter of the LoRA adapters"})
-    peft_lora_alpha: Optional[int] = field(default=16, metadata={"help": "the alpha parameter of the LoRA adapters"})
+    peft_lora_r: Optional[int] = field(default=64, metadata={"help": "the r parameter of the LoRA adapters, 4 to 64"})
+    peft_lora_alpha: Optional[int] = field(default=16, metadata={"help": "the alpha parameter of the LoRA adapters, 16 to 128"})
 
 parser = HfArgumentParser(ScriptArguments)
 script_args = parser.parse_args_into_dataclasses()[0]
@@ -80,6 +80,7 @@ seed_everything(script_args.seed)
 # os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
+device = 'cuda'
 
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
@@ -87,7 +88,7 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<Question>',  '<Answer>', '<DES>', '<Image>']
+new_tokens = ['<Question>',  '<Answer>', '<Image>']
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
@@ -173,13 +174,6 @@ model = PPathVLM(script_args.llm_requires_grad,
 model.print_parameter_counts()
 model.print_llm_parameters()
 
-if script_args.ckpt_path is not None:
-    model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device), strict=False)
-    model = model.to(torch.bfloat16)
-    print("load pre-trained model from: {}".format(script_args.ckpt_path))
-
-print("output dir is set to: {}".format(script_args.output_dir))
-
 training_args = TrainingArguments(
     output_dir=script_args.output_dir,
     per_device_train_batch_size=script_args.train_batch_size,
@@ -196,7 +190,7 @@ training_args = TrainingArguments(
     save_total_limit=script_args.save_total_limit,
     bf16=True,
     warmup_ratio=0.1,
-    evaluation_strategy=script_args.evaluation_strategy,
+    eval_strategy=script_args.evaluation_strategy,
     eval_steps=script_args.eval_steps,
     logging_first_step=True,
     remove_unused_columns=False,
@@ -205,17 +199,26 @@ training_args = TrainingArguments(
 
 if script_args.use_peft:
     peft_config = LoraConfig(
-        r=script_args.peft_lora_r,
-        lora_alpha=script_args.peft_lora_alpha,
-        bias="none",
-        task_type="CAUSAL_LM",
-        # target_modules=["llm"],
+        r=script_args.peft_lora_r,  # Use a moderate rank
+        lora_alpha=script_args.peft_lora_alpha,  # Scaling factor
+        bias="none",  # No bias adaptation
+        task_type="CAUSAL_LM",  # For causal language modeling tasks
+        # lora_dropout=0.1,  # Use dropout for regularization
+        # target_modules=["q_proj", "v_proj"],  # Focus on key attention components
+        # init_lora_weights="pissa"  # Use random initialization
     )
     model.llm = get_peft_model(model.llm, peft_config)
     model.llm.print_trainable_parameters()
 else:
     peft_config = None
 
+if script_args.ckpt_path is not None:
+    model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device), strict=False)
+    # model = model.to(torch.bfloat16)
+    print("load pre-trained model from: {}".format(script_args.ckpt_path))
+    model.print_llm_parameters()
+
+print("output dir is set to: {}".format(script_args.output_dir))
 
 data_collator = MyDataCollatorForPPathVLM(tokenizer=tokenizer, image_processor=model.image_processor)
 

@@ -339,7 +339,6 @@ class Blip2QformerPatch(Blip2Base):
             loss_lm=loss_lm,
         )
 
-
 class Blip2QformerPathInstruct(Blip2QformerPatch):
     def __init__(self,  clip_name="conch",
                         num_query_token=16,
@@ -449,6 +448,69 @@ class Blip2QformerPathInstruct(Blip2QformerPatch):
         generated_pad = torch.ones((bz, padd_len), dtype=labels.dtype).fill_(-100).to(labels.device)
         paded_seq = torch.cat((generated_pad, labels), dim=1)
         return paded_seq
+
+    def generate(self, *args, **kwargs):
+            generation_config = GenerationConfig(
+                max_length=512,
+                temperature=1.0,
+                top_k=50,
+                top_p=0.95,
+                num_return_sequences=1,
+                repetition_penalty=1.1,
+                do_sample=True,
+                pad_token_id=self.llm_tokenizer.eos_token_id,
+                bos_token_id=self.llm_tokenizer.bos_token_id,
+            )
+            
+            with torch.no_grad():
+                image = kwargs["image"].to(torch.bfloat16)
+                text_input = kwargs["text_input"]
+                llm_input_ids = kwargs["input_ids"].to(image.device)
+                llm_input_attention_mask = kwargs["attention_mask"].to(image.device)
+                p_num = kwargs["patch_num"]
+
+                image_embeds = self.vision_encoder.encode_image(image, normalize=False, proj_contrast=False)
+                image_embeds, image_atts = self._split_and_pad(image_embeds, p_num)
+
+                image_embeds = image_embeds.to(image.device).to(torch.bfloat16) # batch x max_length x 512
+                image_atts = image_atts.to(image.device) # batch x max_length
+
+                query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1).to(torch.bfloat16) # learnable query
+                
+                text_Qformer = self.bert_tokenizer(
+                                    text_input,
+                                    padding='longest',
+                                    truncation=True,
+                                    max_length=self.max_txt_len,
+                                    return_tensors="pt",
+                                ).to(image.device)
+                
+                query_atts = torch.ones(query_tokens.size()[:-1]).to(image.device)
+                Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask],dim=1)
+
+                query_output = self.Qformer.bert(
+                                    text_Qformer.input_ids,
+                                    attention_mask=Qformer_atts,
+                                    query_embeds=query_tokens,
+                                    encoder_hidden_states=image_embeds,
+                                    encoder_attention_mask=image_atts,
+                                    return_dict=True,
+                                )
+
+                llm_query_input = self.resampler_layer(query_output.last_hidden_state[:,:query_tokens.size(1),:])
+
+                fusion_embs = self.get_fusion_embedding(llm_input_ids, llm_query_input)
+
+                fusion_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), llm_input_attention_mask)
+                
+                res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=fusion_attention_mask, generation_config=generation_config)
+
+            generate_list = []
+            for item in res:
+                generation = self.llm_tokenizer.decode(item, skip_special_tokens=True)
+                generate_list.append(generation)
+
+            return generate_list
 
     def forward(self, *args, **kwargs):
 

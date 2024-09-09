@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from typing import Dict, List
 import torch
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
@@ -7,6 +8,7 @@ from collections.abc import Mapping
 from transformers.data.data_collator import pad_without_fast_tokenizer_warning, _torch_collate_batch
 import numpy as np
 from PIL import Image
+from sklearn.cluster import KMeans
 
 class DataCollatorMixin:
     def __call__(self, features, return_tensors=None):
@@ -154,6 +156,7 @@ class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrai
         num_list = []
         input_id_list = []
         text_list = []
+        ans_list = []
         attention_mask_list = []
         text_input_list = []
 
@@ -171,6 +174,8 @@ class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrai
             text_input_list.append(d["text_input"])
             if self.test:
                 text_list.append(d["text"])
+                ans_list.append(d["answer"])
+                del d["answer"]
                 del d["text"]
             del d["text_input"]
         # if isinstance(examples[0], Mapping):
@@ -197,6 +202,8 @@ class MyDataCollatorForQFormerPatchInstruct(MyDataCollatorForQFormerPatchPretrai
         # batch = {"text": text_list}
         if self.test:
             batch["text"] = text_list
+            batch["answers"] = ans_list
+            
         batch["text_input"] = text_input_list
         batch["labels"] = labels
         batch["image"] = torch.stack(patch_list)
@@ -317,6 +324,10 @@ class MyDataCollatorForPPathVLMTest(MyDataCollatorForPPathVLM):
 @dataclass
 class MyDataCollatorForWPathVLM(DataCollatorMixin):
     tokenizer: PreTrainedTokenizerBase
+    fea_root: str = None
+    agg_strategy: str = 'abmil'
+    n_heads: List[int] = field(default_factory=lambda: [32, 16, 8])
+    fea_name_list: List[str] = field(default_factory=lambda: ['f1024', 'f2048', 'f4096'])
     fea_dim: int = 512
     n_level: int = 3
     mlm: bool = False
@@ -363,45 +374,120 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         max_dim = 0
         
         for d in examples:
-            current_dim = len(d[key])
+            current_dim = d[key].shape[0]
             if current_dim > max_dim:
                 max_dim = current_dim
 
         for d in examples:
             original_data = d[key]
             original_cor = d[cor]
-            current_dim = len(original_data)
+            current_dim =  d[key].shape[0]
 
-            padded_data = np.zeros(max_dim)
-            cor_data = np.zeros((int(max_dim/self.fea_dim)*2), dtype=int)
-            patch_mask = np.zeros(int(max_dim/self.fea_dim), dtype=int)
+            padded_data = np.zeros([max_dim, self.fea_dim])
+            cor_data = np.zeros([max_dim, 2], dtype=int)
+            patch_mask = np.zeros(max_dim, dtype=int)
 
-            padded_data[:current_dim] = original_data
-            patch_mask[:int(current_dim/self.fea_dim)] = 1
-            cor_data[:int(current_dim/self.fea_dim)*2] = original_cor
+            padded_data[:current_dim, :] = original_data
+            patch_mask[:int(current_dim)] = 1
+            cor_data[:int(current_dim), :] = original_cor
             
 
-            fea_list.append(torch.from_numpy(padded_data.reshape(int(max_dim/self.fea_dim), self.fea_dim)).float())
-            cor_list.append(torch.from_numpy(cor_data.reshape(int(max_dim/self.fea_dim), 2)))
+            fea_list.append(torch.from_numpy(padded_data))
+            cor_list.append(torch.from_numpy(cor_data))
             patch_masks.append(patch_mask)
         
-            del d[key], d[cor]
-        
         return fea_list, cor_list, patch_masks
-            
+
+    def __load_full_feature__(self, fea_path_ori: str):
+
+        fea_path = '/'.join(fea_path_ori.split('/')[-2:])
+        fea_path = os.path.join(self.fea_root, fea_path)
+        fea = np.load(fea_path, allow_pickle=True)
+        f = fea[()]['feature']
+        cor = fea[()]['index']
+        cor = np.array([filename.split('_')[:2] for filename in cor], dtype=int)
+
+        return f, cor
+
+    def __sample_feature__(self, f, cor, n_head: int):
+        
+        num_samples = cor.shape[0]
+
+        # 如果n_head大于或等于cor的数量，保留全部数据
+        if n_head >= num_samples:
+            return f, cor
+
+        # 使用 KMeans 将坐标分成 n_head 个组
+        kmeans = KMeans(n_clusters=n_head, random_state=42)
+        labels = kmeans.fit_predict(cor)  # 为每个坐标分配一个聚类标签
+
+        sampled_indices = []
+
+        # 遍历每个聚类标签，从每个组中随机选择一个点
+        for i in range(n_head):
+            group_indices = np.where(labels == i)[0]
+            if len(group_indices) > 0:
+                sampled_index = np.random.choice(group_indices, 1)[0]  # 随机选择一个样本
+                sampled_indices.append(sampled_index)
+
+        # 获取采样后的特征和坐标
+        f_sampled = f[sampled_indices]
+        cor_sampled = cor[sampled_indices]
+
+        return f_sampled, cor_sampled
+
+    def __load_clusters_feature__(self, fea_path_ori: str):
+
+        fea_path = '/'.join(fea_path_ori.split('/')[-2:])
+        fea_path = fea_path.split('.')[0] + '.npy'
+        fea_path = os.path.join(self.fea_root, fea_path)
+        fea = np.load(fea_path, allow_pickle=True)
+        f1 = fea[()]['f1024']
+        f2 = fea[()]['f2048']
+        f3 = fea[()]['f4096']
+        cor1 = np.zeros((f1.shape[0], 2), dtype=int)
+        cor2 = np.zeros((f2.shape[0], 2), dtype=int)
+        cor3 = np.zeros((f3.shape[0], 2), dtype=int)
+
+        return [f1, f2, f3], [cor1, cor2, cor3]
+
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
 
         fea_list = []
         cor_list = []
         patch_mask_list = []
         # ans_list = []
+        exa_list = []
 
-        # for d in examples:
-        #     ans_list.append(d["text"])
-        #     del d["text"]
+        # load from local npy
+        for d in examples:
+            exa = {}
 
+            for i in range(len(self.fea_name_list)):
+                fea_name = self.fea_name_list[i]
+                fea_path_ori = d[fea_name]
+                del d[fea_name]
+                if self.agg_strategy == 'abmil':
+                    f, cor = self.__load_full_feature__(fea_path_ori)
+                elif self.agg_strategy == 'sample':
+                    f, cor = self.__load_full_feature__(fea_path_ori)
+                    f, cor = self.__sample_feature__(f, cor, self.n_heads[i])
+                else:
+                    continue
+                exa['f{}'.format(i)] = f
+                exa['cor{}'.format(i)] = cor
+            
+            if self.agg_strategy in ['kmeans','gmm']: # kmeans, gmm
+                f, cor = self.__load_clusters_feature__(fea_path_ori)
+                for i in range(len(f)):
+                    exa['f{}'.format(i)] = f[i]
+                    exa['cor{}'.format(i)] = cor[i]
+
+            exa_list.append(exa)
+
+        # transfer to list
         for level in range(self.n_level):
-            fea, cor, patch_mask = self.__feature_trans__(examples, "f{}".format(level+1), "cor{}".format(level+1))
+            fea, cor, patch_mask = self.__feature_trans__(exa_list, "f{}".format(level), "cor{}".format(level))
             fea_list.append(fea)
             cor_list.append(cor)
             patch_mask_list.append(patch_mask)
@@ -424,9 +510,9 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         # batch["answers"] = ans_list
 
         for level in range(self.n_level):
-            batch["fea{}".format(level+1)] = torch.stack(fea_list[level])
-            batch["mask{}".format(level+1)] = torch.from_numpy(np.array(patch_mask_list[level], dtype=int))
-            batch["cor{}".format(level+1)] = torch.stack(cor_list[level])
+            batch["fea{}".format(level)] = torch.stack(fea_list[level])
+            batch["mask{}".format(level)] = torch.from_numpy(np.array(patch_mask_list[level], dtype=int))
+            batch["cor{}".format(level)] = torch.stack(cor_list[level])
 
         return batch
 
@@ -479,26 +565,26 @@ class MyDataCollatorForWPathVLMTest(DataCollatorMixin):
         max_dim = 0
         
         for d in examples:
-            current_dim = len(d[key])
+            current_dim = d[key].shape[0]
             if current_dim > max_dim:
                 max_dim = current_dim
 
         for d in examples:
             original_data = d[key]
             original_cor = d[cor]
-            current_dim = len(original_data)
+            current_dim =  d[key].shape[0]
 
-            padded_data = np.zeros(max_dim)
-            cor_data = np.zeros((int(max_dim/self.fea_dim)*2), dtype=int)
-            patch_mask = np.zeros(int(max_dim/self.fea_dim), dtype=int)
+            padded_data = np.zeros([max_dim, self.fea_dim])
+            cor_data = np.zeros((max_dim, 2), dtype=int)
+            patch_mask = np.zeros(max_dim, dtype=int)
 
-            padded_data[:current_dim] = original_data
-            patch_mask[:int(current_dim/self.fea_dim)] = 1
-            cor_data[:int(current_dim/self.fea_dim)*2] = original_cor
+            padded_data[:current_dim, :] = original_data
+            patch_mask[:int(current_dim)] = 1
+            cor_data[:int(current_dim), :] = original_cor
             
 
-            fea_list.append(torch.from_numpy(padded_data.reshape(int(max_dim/self.fea_dim), self.fea_dim)).float())
-            cor_list.append(torch.from_numpy(cor_data.reshape(int(max_dim/self.fea_dim), 2)))
+            fea_list.append(torch.from_numpy(padded_data.float()))
+            cor_list.append(torch.from_numpy(cor_data))
             patch_masks.append(patch_mask)
         
             del d[key], d[cor]

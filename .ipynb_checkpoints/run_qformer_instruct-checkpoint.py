@@ -11,7 +11,7 @@ from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
 from model.qformer import Blip2QformerPathInstruct
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig
 from datasets import load_dataset, load_from_disk, concatenate_datasets
 from utils.data_collator import MyDataCollatorForQFormerPatchInstruct
 
@@ -27,7 +27,7 @@ class ScriptArguments:
     load_in_4bit: Optional[bool] = field(default=False, metadata={"help": "load the model in 4 bits precision"})
     trust_remote_code: Optional[bool] = field(default=False, metadata={"help": "Enable `trust_remote_code`"})
     token: Optional[bool] = field(default=True, metadata={"help": "Use HF auth token to access the model"})
-    seed: Optional[int] = field(default=2024, metadata={"help": "seed"})
+    seed: Optional[int] = field(default=42, metadata={"help": "seed"})
 
     # model
     llm_name: Optional[str] = field(default="mistralai/Mistral-7B-Instruct-v0.2", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B, meta-llama/Llama-2-7b-chat-hf "})
@@ -47,7 +47,7 @@ class ScriptArguments:
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
     save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=2, metadata={"help": "Limits total number of checkpoints."})
+    save_total_limit: Optional[int] = field(default=5, metadata={"help": "Limits total number of checkpoints."})
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     
@@ -101,6 +101,16 @@ def formatting_func_vqap(examples):
     question = question.replace("<image>\n", "")
     question = question.replace("<image>", "")
     text = f"<Question> {question}{llm_tokenizer.eos_token}" + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
+    examples["text_input"] = question
+    examples["text"] = text
+    return examples
+
+def formatting_func_ytb(examples):
+    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
+    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
+    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
+    text = f"<Question> {question}{llm_tokenizer.eos_token}" + f"<Answer> {answer}{llm_tokenizer.eos_token}\n"
+    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
     examples["text_input"] = question
     examples["text"] = text
     return examples
@@ -207,16 +217,11 @@ training_args = TrainingArguments(
 
 if script_args.use_peft:
     peft_config = LoraConfig(
-        r=script_args.peft_lora_r,  # Use a moderate rank
-        lora_alpha=script_args.peft_lora_alpha,  # Scaling factor
-        bias="none",  # No bias adaptation
-        task_type="CAUSAL_LM",  # For causal language modeling tasks
-        # lora_dropout=0.1,  # Use dropout for regularization
-        # target_modules=["q_proj", "v_proj"],  # Focus on key attention components
-        # init_lora_weights="pissa"  # Use random initialization
+        r=script_args.peft_lora_r,
+        lora_alpha=script_args.peft_lora_alpha,
+        bias="none",
+        task_type="CAUSAL_LM",
     )
-    model.llm = get_peft_model(model.llm, peft_config)
-    model.llm.print_trainable_parameters()
 else:
     peft_config = None
 
@@ -229,7 +234,7 @@ trainer = CustomTrainer(
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     dataset_text_field=script_args.dataset_text_field,
-    # peft_config=peft_config,
+    peft_config=peft_config,
     tokenizer=llm_tokenizer,
     data_collator=data_collator,
     compute_metrics=my_compute_metrics,

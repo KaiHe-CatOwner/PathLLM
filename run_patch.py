@@ -3,6 +3,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 import ast
 import random
+import torch
 import pandas as pd
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
@@ -38,14 +39,15 @@ class ScriptArguments:
     dataset_local_paths: Optional[str] = field(default=None, metadata={"help": "the local path for some datasets"})
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     data_cache_dir: Optional[str] = field(default="/home/z/zeyugao/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
-    
+    ckpt_path: Optional[str] = field(default=None, metadata={"help": "ckpt path"})
+
     # log and save model
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
     output_dir: Optional[str] = field(default="output", metadata={"help": "the output directory"})
     logging_steps: Optional[int] = field(default=1, metadata={"help": "the number of logging steps"})
     max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
     save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=5, metadata={"help": "Limits total number of checkpoints."})
+    save_total_limit: Optional[int] = field(default=2, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -77,6 +79,7 @@ seed_everything(script_args.seed)
 # os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
+device = 'cuda'
 
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
@@ -84,7 +87,7 @@ tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<Question>',  '<Answer>', '<DES>', '<Image>']
+new_tokens = ['<Question>',  '<Answer>', '<Image>']
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
@@ -95,37 +98,8 @@ questions = questions[0].tolist()
 def formatting_func_itp(examples):
     question = random.choice(questions)
     answer = examples["txt"]
-    # text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    text = f"<DES> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-def formatting_func_vqap(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    if answer in ["yes","no"]:
-        question += "Answer yes or no only!"
-    question = question.replace("<image>\n", "")
-    question = question.replace("<image>", "")
-    # text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    text = f"<DES> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-# CNX-PathLLM/MultiConversation
-# [{'from': 'human', 'value': 'What are the key features of this image that suggest chronic pancreatitis?'},
-# {'from': 'gpt', 'value': 'The presence of duct dilatation, fibrosis, and pancreatic tissue necrosis are indicative of chronic pancreatitis.}]
-def formatting_func_vmc(examples): # image conversations
-    conversation = examples["conversations"]
-    conversation = ast.literal_eval(conversation)
-    text = ""
-    for sentence in conversation:
-        sentence['value'] = sentence['value'].replace("<image>\n", "")
-        sentence['value'] = sentence['value'].replace("<image>", "")
-        if sentence['from'] == 'human':
-            text += f"<Question> {sentence['value']}{tokenizer.eos_token}"
-        elif sentence['from'] == 'gpt':
-            text += f"<Answer> {sentence['value']}{tokenizer.eos_token}"
+    text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
     examples["text"] = text
     return examples
 
@@ -133,8 +107,8 @@ def formatting_func_ytb(examples):
     text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
     question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
     answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
-    # text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    text = f"<DES> {answer}{tokenizer.eos_token}\n"
+    text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
     examples["text"] = text
     return examples
 
@@ -184,6 +158,16 @@ model = PPathVLM(script_args.llm_requires_grad,
                 new_tokens_ids[-1],
                 script_args.data_cache_dir)
 
+model.print_parameter_counts()
+model.print_llm_parameters()
+
+if script_args.ckpt_path is not None:
+    model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device), strict=False)
+    model = model.to(torch.bfloat16)
+    print("load pre-trained model from: {}".format(script_args.ckpt_path))
+
+model.print_llm_parameters()
+
 print("output dir is set to: {}".format(script_args.output_dir))
 
 training_args = TrainingArguments(
@@ -209,13 +193,19 @@ training_args = TrainingArguments(
     label_names=["labels"]
 )
 
+
 if script_args.use_peft:
     peft_config = LoraConfig(
-        r=script_args.peft_lora_r,
-        lora_alpha=script_args.peft_lora_alpha,
-        bias="none",
-        task_type="CAUSAL_LM",
+        r=script_args.peft_lora_r,  # Use a moderate rank
+        lora_alpha=script_args.peft_lora_alpha,  # Scaling factor
+        bias="none",  # No bias adaptation
+        task_type="CAUSAL_LM",  # For causal language modeling tasks
+        # lora_dropout=0.1,  # Use dropout for regularization
+        # target_modules=["q_proj", "v_proj"],  # Focus on key attention components
+        # init_lora_weights="pissa"  # Use random initialization
     )
+    model.llm = get_peft_model(model.llm, peft_config)
+    model.llm.print_trainable_parameters()
 else:
     peft_config = None
 
@@ -230,7 +220,7 @@ trainer = CustomTrainer(
     eval_dataset=eval_dataset,
     dataset_num_proc = 20,
     dataset_text_field=script_args.dataset_text_field,
-    peft_config=peft_config,
+    peft_config=None,
     tokenizer=tokenizer,
     data_collator=data_collator,
     compute_metrics=my_compute_metrics,

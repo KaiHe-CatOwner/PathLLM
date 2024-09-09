@@ -317,22 +317,34 @@ class PPathVLM(nn.Module):
 class WPathVLM(PPathVLM):
     def __init__(self, llm_requires_grad, load_in_8bit, load_in_4bit, llm_name, 
                  trust_remote_code, token, tokenizer, image_token_id,
-                 n_heads=2, n_level=3, embed_dim=512, data_cache_dir = '~/.cache'):
+                 n_heads='32,16,8', n_level=3, embed_dim=512, agg_strategy='abmil',
+                 data_cache_dir = '~/.cache'):
         
         nn.Module.__init__(self)
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.llm_tokenizer = tokenizer
         self.data_cache_dir = data_cache_dir
         self.llm = self.load_llm(load_in_8bit, load_in_4bit, llm_name, trust_remote_code, token)
         self.embedding_layer = self.llm.get_input_embeddings()
-        self.n_heads = n_heads
+        self.n_heads = [int(n_head) for n_head in n_heads.split(',')]
         self.n_level = n_level
-        self.embed_dim = embed_dim
+        self.agg_strategy = agg_strategy
+
+        if self.agg_strategy == 'gmm':
+            self.embed_dim = 2*embed_dim + 1
+        else:
+            self.embed_dim = embed_dim
 
         size = [self.embed_dim, int(self.embed_dim/2)]
 
+        if self.agg_strategy == 'abmil':
         # attention could be splitted as level based
-        self.att_net = Attn_Net_Gated(L = size[0], D = size[1], dropout = True, heads = self.n_heads)
+            self.att_net = nn.ModuleList([
+                Attn_Net_Gated(L=size[0], D=size[1], dropout=True, heads=self.n_heads[i]) 
+                for i in range(self.n_level)
+            ])
 
         # self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8, batch_first=True)
         self.resampler_layer = nn.Sequential(
@@ -351,20 +363,23 @@ class WPathVLM(PPathVLM):
 
     def get_wsi_embedding(self, patch_embs, patch_masks, level):
 
-        batch_size, num_patches, embedding_size = patch_embs.shape
+        if self.agg_strategy == 'abmil': 
 
-        # patch embedding attention part
-        patch_embs_flattened = patch_embs.view(batch_size * num_patches, embedding_size) # shape (bz x np, 512)
-        patch_masks_flattened = patch_masks.view(batch_size * num_patches)
+            batch_size, num_patches, embedding_size = patch_embs.shape # (bz, np(cc), 512)
+            # patch embedding attention part
+            patch_embs_flattened = patch_embs.view(batch_size * num_patches, embedding_size) # shape (bz x np, 512)
+            patch_masks_flattened = patch_masks.view(batch_size * num_patches)
 
-        patch_attention_matrices = self.att_net(patch_embs_flattened, patch_masks_flattened) # shape (bz x np, n_heads)
-        patch_attention_matrices = patch_attention_matrices.view(batch_size, num_patches, self.n_heads) # shape (bz, np, n_heads)
-        patch_attention_matrices = F.softmax(patch_attention_matrices, dim=1) # shape (bz, np, n_heads)
-        # aggregated to WSI embedding
-        mapped_patch_embs = patch_embs_flattened.view(batch_size, num_patches, embedding_size) # shape (bz, np, 512)
-        agged_WSI_embs = patch_attention_matrices.unsqueeze(-1) * mapped_patch_embs.unsqueeze(-2)  # shape (bz, np, n_heads, 512)
-        agged_WSI_embs = torch.sum(agged_WSI_embs, dim=1) # (bz, n_heads, 512)
-        agged_WSI_embs = self.resampler_layer(agged_WSI_embs) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+            patch_attention_matrices = self.att_net[level](patch_embs_flattened, patch_masks_flattened) # shape (bz x np, n_heads)
+            patch_attention_matrices = patch_attention_matrices.view(batch_size, num_patches, self.n_heads[level]) # shape (bz, np, n_heads)
+            patch_attention_matrices = F.softmax(patch_attention_matrices, dim=1) # shape (bz, np, n_heads)
+            # aggregated to WSI embedding
+            mapped_patch_embs = patch_embs_flattened.view(batch_size, num_patches, embedding_size) # shape (bz, np, 512)
+            agged_WSI_embs = patch_attention_matrices.unsqueeze(-1) * mapped_patch_embs.unsqueeze(-2)  # shape (bz, np, n_heads, 512)
+            agged_WSI_embs = torch.sum(agged_WSI_embs, dim=1) # (bz, n_heads, 512)
+        
+        else: # "sample, kmeans, gmm"
+            agged_WSI_embs = patch_embs
 
         return agged_WSI_embs
 
@@ -395,9 +410,12 @@ class WPathVLM(PPathVLM):
             text_attention_mask = kwargs["attention_mask"]
             agged_WSI_embs = []
             for level in range(self.n_level):
-                patch_embs = kwargs["fea{}".format(level+1)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
-                patch_attention_mask = kwargs["mask{}".format(level+1)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
-                agged_WSI_embs.append(self.get_wsi_embedding(patch_embs, patch_attention_mask, level))
+                patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
+                patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
+                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
+                agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+                agged_WSI_embs.append(agged_WSI_embs_level)
+
             fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs) # wsi token is on the left
             text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
 
@@ -416,9 +434,11 @@ class WPathVLM(PPathVLM):
         agged_WSI_embs = []
         
         for level in range(self.n_level):
-            patch_embs = kwargs["fea{}".format(level+1)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
-            patch_attention_mask = kwargs["mask{}".format(level+1)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
-            agged_WSI_embs.append(self.get_wsi_embedding(patch_embs, patch_attention_mask, level))
+            patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
+            patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
+            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
+            agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+            agged_WSI_embs.append(agged_WSI_embs_level)
         
         fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
         text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)

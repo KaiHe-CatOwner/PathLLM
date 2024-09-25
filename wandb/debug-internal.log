@@ -1,1 +1,18 @@
-run-20240910_005316-knt79rx3/logs/debug-internal.log
+{"time":"2024-09-25T21:25:58.173027219+08:00","level":"INFO","msg":"using version","core version":"0.18.1"}
+{"time":"2024-09-25T21:25:58.173073374+08:00","level":"INFO","msg":"created symlink","path":"/home/pxb/PathLLM-KQ/PathLLM/wandb/offline-run-20240925_212558-fxvujjmx/logs/debug-core.log"}
+{"time":"2024-09-25T21:25:58.173157196+08:00","level":"INFO","msg":"using version","core version":"0.18.1"}
+{"time":"2024-09-25T21:25:58.173167207+08:00","level":"INFO","msg":"created symlink","path":"/home/pxb/PathLLM-KQ/PathLLM/wandb/offline-run-20240925_212558-fxvujjmx/logs/debug-core.log"}
+{"time":"2024-09-25T21:25:58.176345394+08:00","level":"INFO","msg":"created new stream","id":"fxvujjmx"}
+{"time":"2024-09-25T21:25:58.17637965+08:00","level":"INFO","msg":"stream: started","id":"fxvujjmx"}
+{"time":"2024-09-25T21:25:58.176424965+08:00","level":"INFO","msg":"sender: started","stream_id":{"value":"fxvujjmx"}}
+{"time":"2024-09-25T21:25:58.1764016+08:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"fxvujjmx"}}
+{"time":"2024-09-25T21:25:58.176412337+08:00","level":"INFO","msg":"handler: started","stream_id":{"value":"fxvujjmx"}}
+{"time":"2024-09-25T21:25:58.182943397+08:00","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2024-09-25T21:25:58.226484206+08:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2024-09-25T21:26:16.791985055+08:00","level":"INFO","msg":"stream: closing","id":"fxvujjmx"}
+{"time":"2024-09-25T21:26:16.792047451+08:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2024-09-25T21:26:16.792902943+08:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2024-09-25T21:26:16.793258941+08:00","level":"INFO","msg":"handler: closed","stream_id":{"value":"fxvujjmx"}}
+{"time":"2024-09-25T21:26:16.793294599+08:00","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"fxvujjmx"}}
+{"time":"2024-09-25T21:26:16.793352657+08:00","level":"INFO","msg":"sender: closed","stream_id":{"value":"fxvujjmx"}}
+{"time":"2024-09-25T21:26:16.793408773+08:00","level":"INFO","msg":"stream: closed","id":"fxvujjmx"}

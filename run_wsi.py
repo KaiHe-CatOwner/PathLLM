@@ -4,6 +4,7 @@ import os
 import ast
 import random
 import pandas as pd
+import torch
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
 from utils.utils import my_compute_metrics,seed_everything
@@ -89,7 +90,8 @@ os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 
 # set up tokenizer
-tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
+# tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name) # need to local path in XJKQ
+tokenizer = AutoTokenizer.from_pretrained('/data/pxb/models/llama3.1-8b-instruct')
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 tokenizer.truncation_side = 'left'
@@ -117,6 +119,7 @@ else:
 
 
 # if script_args.data_local_dir is None:
+'''
 dataset = []
 columns_to_remove = ['description', 'slide_id']
 
@@ -128,6 +131,28 @@ for dataset_name in script_args.dataset_name_list.split(","):
         columns_to_remove.append('site')
     one_dataset = one_dataset.map(formatting_func, num_proc=20, remove_columns=columns_to_remove)
     dataset.append(one_dataset)
+    
+
+dataset = concatenate_datasets(dataset)
+
+# dataset = dataset.train_test_split(test_size=0.05)
+# eval_dataset = dataset['test']
+# train_dataset = dataset['train']
+train_dataset = dataset
+eval_dataset = None
+'''
+dataset = []
+columns_to_remove = ['description', 'slide_id']
+
+for dataset_name in script_args.dataset_name_list.split(","):
+    one_dataset = load_from_disk(script_args.data_local_dir)
+    if 'project' in one_dataset['train'].column_names:
+        columns_to_remove.append('project')
+    elif 'site' in one_dataset['train'].column_names:
+        columns_to_remove.append('site')
+    one_dataset = one_dataset.map(formatting_func, num_proc=20, remove_columns=columns_to_remove)
+    dataset.append(one_dataset['train'])
+    
 
 dataset = concatenate_datasets(dataset)
 
@@ -137,12 +162,12 @@ dataset = concatenate_datasets(dataset)
 train_dataset = dataset
 eval_dataset = None
 
-# else:
-#     dataset = load_from_disk(script_args.data_local_dir)
-#     dataset = dataset.map(formatting_func, num_proc=20, remove_columns=['label', 'slide_id', 'project'])
-#     train_folds = [dataset[f'fold_{i}'] for i in range(10) if i != script_args.eval_fold_index]
-#     train_dataset = concatenate_datasets(train_folds)
-#     eval_dataset = dataset['fold_{}'.format(script_args.eval_fold_index)]
+# else: local_version
+# dataset = load_from_disk(script_args.data_local_dir)
+# dataset = dataset.map(formatting_func, num_proc=20, remove_columns=['label', 'slide_id', 'project'])
+# train_folds = [dataset[f'fold_{i}'] for i in range(10) if i != script_args.eval_fold_index]
+# train_dataset = concatenate_datasets(train_folds)
+# eval_dataset = dataset['fold_{}'.format(script_args.eval_fold_index)]
 
 # df_indices = pd.read_csv(script_args.dataset_split)
 

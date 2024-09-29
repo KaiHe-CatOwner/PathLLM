@@ -549,9 +549,9 @@ class Blip2QformerPathInstruct(Blip2QformerPatch):
         Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask],dim=1)
 
         query_output = self.Qformer.bert(
-                            text_Qformer.input_ids,
+                            text_Qformer.input_ids, # q1
                             attention_mask=Qformer_atts,
-                            query_embeds=query_tokens,
+                            query_embeds=query_tokens, #q2
                             encoder_hidden_states=image_embeds,
                             encoder_attention_mask=image_atts,
                             return_dict=True,

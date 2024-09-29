@@ -49,7 +49,7 @@ class ScriptArguments:
     max_steps: Optional[int] = field(default=-1, metadata={"help": "the number of training steps"})
     warmup_steps: Optional[int] = field(default=20, metadata={"help": "the number of warmup steps"})
     save_steps: Optional[int] = field(default=500, metadata={"help": "Number of updates steps before two checkpoint saves"})
-    save_total_limit: Optional[int] = field(default=2, metadata={"help": "Limits total number of checkpoints."})
+    save_total_limit: Optional[int] = field(default=1, metadata={"help": "Limits total number of checkpoints."})
     
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
     resume_from_checkpoint: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
@@ -68,7 +68,6 @@ class ScriptArguments:
     agg_strategy: Optional[str] = field(default='abmil', metadata={"help": "the strategy for WSI aggregation, sample, kmeans, gmm, abmil"})
     n_heads: Optional[str] = field(default='32,16,8', metadata={"help": "the number of attention heads for WSI aggregation, for sample and abmil"})
     
-        
     # eval
     evaluation_strategy: Optional[str] = field(default="steps", metadata={"help": "epoch, step"})
     eval_steps: Optional[int] = field(default=100000, metadata={"help": "eval_steps"})
@@ -102,11 +101,17 @@ print("new_tokens_ids: ", new_tokens_ids)
 questions = pd.read_csv('./utils/question_wsi_list.csv', header=None)  
 questions = questions[0].tolist()
 
-def formatting_func(examples):
+def formatting_func_des(examples):
     question = random.choice(questions)
     answer = examples["description"]
     text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    # text = f"<|Describe|> {answer}{tokenizer.eos_token}\n"
+    examples["text"] = text
+    return examples
+
+def formatting_func_qa(examples):
+    question = examples["question"]
+    answer = examples["answer"]
+    text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
     examples["text"] = text
     return examples
 
@@ -118,15 +123,21 @@ else:
 
 # if script_args.data_local_dir is None:
 dataset = []
-columns_to_remove = ['description', 'slide_id']
 
 for dataset_name in script_args.dataset_name_list.split(","):
+    columns_to_remove = ['slide_id']
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     if 'project' in one_dataset.column_names:
         columns_to_remove.append('project')
     elif 'site' in one_dataset.column_names:
         columns_to_remove.append('site')
-    one_dataset = one_dataset.map(formatting_func, num_proc=20, remove_columns=columns_to_remove)
+
+    if 'QA' in dataset_name:
+        columns_to_remove += ['question', 'answer']
+        one_dataset = one_dataset.map(formatting_func_qa, num_proc=20, remove_columns=columns_to_remove)
+    else:
+        columns_to_remove += ['description']
+        one_dataset = one_dataset.map(formatting_func_des, num_proc=20, remove_columns=columns_to_remove)
     dataset.append(one_dataset)
 
 dataset = concatenate_datasets(dataset)

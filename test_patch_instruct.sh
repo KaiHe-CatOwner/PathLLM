@@ -19,8 +19,11 @@ module load cuDNN/8.7.0.84-CUDA-11.8.0
 
 source /bask/projects/p/phwq4930-renal-canc/Zeyu/pyvenv/pathllmGZY/bin/activate
 
-python test_patch_instruct.py --use_peft False --peft_lora_r 8 --adaptor qformer\
-        --ckpt_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/Conch_Bert_Llama3.1_Stage12_freeze/checkpoint-3000/ckpt3000.bin
+python test_patch_instruct.py --use_peft True --peft_lora_r 8 --adaptor linear --batch_size 8\
+        --ckpt_path /bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/source/PathLLM/output/Conch_Llama3.1_Stage12_lora8/ckpt14500.bin
+
+# python test_patch_instruct.py --use_peft False --peft_lora_r 8 --adaptor qformer\
+#         --ckpt_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/Conch_Bert_Llama3.1_Stage12_freeze/ckpt13000.bin
         
         #/bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/Conch_Bert_Llama3.1_Stage12_lora8/checkpoint-13000/ckpt13000.bin 
         

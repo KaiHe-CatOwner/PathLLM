@@ -331,11 +331,7 @@ class WPathVLM(PPathVLM):
         self.n_heads = [int(n_head) for n_head in n_heads.split(',')]
         self.n_level = n_level
         self.agg_strategy = agg_strategy
-
-        if self.agg_strategy == 'gmm':
-            self.embed_dim = 2*embed_dim + 1
-        else:
-            self.embed_dim = embed_dim
+        self.embed_dim = embed_dim
 
         size = [self.embed_dim, int(self.embed_dim/2)]
 
@@ -410,7 +406,7 @@ class WPathVLM(PPathVLM):
             text_attention_mask = kwargs["attention_mask"]
             agged_WSI_embs = []
             for level in range(self.n_level):
-                patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
+                patch_embs = kwargs["fea{}".format(level)].to(torch.float) # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
                 patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
                 agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
                 agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)

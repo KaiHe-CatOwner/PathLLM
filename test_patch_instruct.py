@@ -230,14 +230,20 @@ def predict_and_save_open_ended(eval_dataloader, model, script_args):
         images = batch['image'].to(device)
         answers = batch['answers']
         p_num = batch["patch_num"]
-        text_input = batch["text_input"]
+        if script_args.adaptor == 'qformer':
+            text_input = batch["text_input"]
 
-        # 执行模型推断
-        res = model.generate(input_ids=input_ids,
-                            attention_mask=attention_masks,
-                            patch_num=p_num,
-                            text_input=text_input,
-                            image=images)
+            # 执行模型推断
+            res = model.generate(input_ids=input_ids,
+                                attention_mask=attention_masks,
+                                patch_num=p_num,
+                                text_input=text_input,
+                                image=images)
+        else:
+            res = model.generate(input_ids=input_ids,
+                    attention_mask=attention_masks,
+                    patch_num=p_num,
+                    image=images)
         
         for i in range(len(answers)):
                 if  len(split_sentence(answers[i], 1)) == 0:
@@ -301,15 +307,20 @@ def predict_and_save_close_ended(eval_dataloader, model, script_args):
         images = batch['image'].to(device)
         answers = batch['answers']
         p_num = batch["patch_num"]
-        text_input = batch["text_input"]
+        if script_args.adaptor == 'qformer':
+            text_input = batch["text_input"]
 
         # 执行模型推断
-        res = model.generate(input_ids=input_ids,
-                            attention_mask=attention_masks,
-                            patch_num=p_num,
-                            text_input=text_input,
-                            image=images)
-        
+            res = model.generate(input_ids=input_ids,
+                                attention_mask=attention_masks,
+                                patch_num=p_num,
+                                text_input=text_input,
+                                image=images)
+        else:
+            res = model.generate(input_ids=input_ids,
+                                attention_mask=attention_masks,
+                                patch_num=p_num,
+                                image=images)        
         for i in range(len(answers)):
                 if  len(split_sentence(answers[i], 1)) == 0:
                     continue
@@ -361,13 +372,19 @@ def test_some_samples(test_image_dir, model, data_collator, tokenizer):
     input_dic = tokenizer(text_list, return_tensors="pt")
     input_dic["image"] = patch_list
     input_dic["patch_num"] = num_list
-    input_dic["text_input"] = text_list
+    if script_args.adaptor == 'qformer':
+        input_dic["text_input"] = text_list
 
-    res = model.generate(input_ids=input_dic["input_ids"].to(device),
-                     attention_mask=input_dic["attention_mask"].to(device),
-                     patch_num=input_dic["patch_num"],
-                     text_input=input_dic["text_input"],
-                     image=input_dic["image"].to(device))
+        res = model.generate(input_ids=input_dic["input_ids"].to(device),
+                 attention_mask=input_dic["attention_mask"].to(device),
+                 patch_num=input_dic["patch_num"],
+                 text_input=input_dic["text_input"],
+                 image=input_dic["image"].to(device))
+    else:
+        res = model.generate(input_ids=input_dic["input_ids"].to(device),
+                 attention_mask=input_dic["attention_mask"].to(device),
+                 patch_num=input_dic["patch_num"],
+                 image=input_dic["image"].to(device))
     
     for i in range(len(res)):
         print("{}: {} \n".format(image_paths[i], res[i]))

@@ -17,7 +17,7 @@ module load GCCcore/11.3.0 Python/3.10.4
 module load CUDA/11.8.0
 module load cuDNN/8.7.0.84-CUDA-11.8.0
 
-source /bask/projects/p/phwq4930-gbm/Zeyu/pyvenv/pathllmGZY/bin/activate
+source /bask/projects/p/phwq4930-renal-canc/Zeyu/pyvenv/pathllmGZY/bin/activate
 export WANDB_MODE=online
 
 accelerate launch --config_file=./accelerate_configs/deepspeed_zero2.yaml run_qformer_instruct.py --max_steps 200_000\

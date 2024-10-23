@@ -459,10 +459,10 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
             end_idx = (row == self.tokenizer.convert_tokens_to_ids("<Answer>")).nonzero(as_tuple=True)[0]
     
             # 如果起始和结束索引存在，则将范围内的值设为 -100
-            if start_idx.numel() > 0 and end_idx.numel() > 0:
-                row[start_idx.item():end_idx.item() + 1] = -100
-                if self.tokenizer.pad_token_id is not None:
-                    labels[labels == self.tokenizer.pad_token_id] = -100
+            if end_idx.numel() > 0:
+                row[0:end_idx.item() + 1] = -100
+            if self.tokenizer.pad_token_id is not None:
+                row[row == self.tokenizer.pad_token_id] = -100
 
         if self.tokenizer.pad_token_id is not None:
             labels[labels == self.tokenizer.pad_token_id] = -100

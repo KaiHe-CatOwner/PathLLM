@@ -464,9 +464,6 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
             if self.tokenizer.pad_token_id is not None:
                 row[row == self.tokenizer.pad_token_id] = -100
 
-        if self.tokenizer.pad_token_id is not None:
-            labels[labels == self.tokenizer.pad_token_id] = -100
-
         batch["labels"] = labels
         if self.test:
             batch["answers"] = ans_list

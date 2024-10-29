@@ -1,6 +1,8 @@
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+import os
+import re
 import torch
 import random
 import pandas as pd
@@ -14,6 +16,7 @@ from dataclasses import dataclass, field
 from utils.data_collator import MyDataCollatorForWPathVLM
 from datasets import load_dataset, concatenate_datasets, load_from_disk
 from model.my_model import WPathVLM
+from peft import LoraConfig, get_peft_model
 
 from utils.eval_utils import calculate_prf_score, compute_bleu_scores, split_sentence, compute_cider_scores, compute_spice_scores
 
@@ -61,18 +64,36 @@ class ScriptArguments:
     shuffle: Optional[bool] = field(default=False, metadata={"help": "shuffle eval_dataloader or not"})
     eval_sample_size: Optional[int] = field(default=-1, metadata={"help": "-1 indicate evaluating on all"})
 
+    #lora
+    use_peft: Optional[bool] = field(default=False, metadata={"help": "Wether to use PEFT or not to train adapters"})
+    peft_lora_r: Optional[int] = field(default=64, metadata={"help": "the r parameter of the LoRA adapters, 4 to 64"})
+    peft_lora_alpha: Optional[int] = field(default=16, metadata={"help": "the alpha parameter of the LoRA adapters, 16 to 128"})
+
 def formatting_func_des(examples):
     question = random.choice(questions)
     answer = examples["description"]
-    text = f"<Question> {question}{tokenizer.eos_token} " # + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    text = f"<Question> {question} " + f"<Answer> "
+    examples["text"] = text
+    examples["answer"] = answer
+    examples["question"] = question
+    return examples
+
+def formatting_func_qa_open(examples):
+    question = examples["question"]
+    answer = examples["answer"]
+    text = f"<Question> {question} " + f"<Answer> "
     examples["text"] = text
     examples["answer"] = answer
     return examples
 
-def formatting_func_qa(examples):
+def formatting_func_qa_close(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<Question> {question}{tokenizer.eos_token} " # + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    if answer.lower() in ['yes', 'no']:
+        prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
+    else:
+        prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
+    text = f"<Question> {prompt} {question} " + f"<Answer> "
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -90,8 +111,79 @@ def tokenize(element):
     )
     return {"input_ids": outputs["input_ids"], "attention_mask": outputs["attention_mask"]}
 
+def evaluate_model(model, eval_dataloader, script_args, mode='open'):
+    """
+    Evaluate the model on the provided data loader and save results.
+    
+    Parameters:
+        model: The model to evaluate.
+        eval_dataloader: DataLoader for evaluation data.
+        device: The device (CPU or GPU) on which to perform computations.
+        script_args: Arguments containing settings for evaluation, e.g., eval_sample_size and results_save_path.
+    """
+    qes_list, ans_list, res_list = [], [], []
+    
+    total_batches = len(eval_dataloader)
+    N = script_args.eval_sample_size if script_args.eval_sample_size != -1 else total_batches
+
+    for i, batch in enumerate(tqdm(eval_dataloader, total=N, desc="Evaluating")):
+        if i >= N:
+            break
+
+        # Move inputs to the device
+        input_ids = batch['input_ids'].to(device)
+        attention_masks = batch['attention_mask'].to(device)
+        fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
+        mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
+        
+        questions = batch['questions']
+        answers = batch['answers']
+
+        # Model inference
+        res = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_masks,
+            fea0=fea0,
+            fea1=fea1,
+            fea2=fea2,
+            mask0=mask0,
+            mask1=mask1,
+            mask2=mask2
+        )
+
+        # Collect results
+        qes_list.extend(questions)
+        ans_list.extend(answers)
+        res_list.extend(res)
+
+    # Save results in a dictionary
+    results = {
+        "questions": qes_list,
+        "answers": ans_list,
+        "results": res_list
+    }
+
+    # Evaluate using the specified metrics function
+    if mode == 'open':
+        metrics_open_ended(res_list, ans_list, script_args)
+    else:
+        metrics_close_ended(res_list, ans_list, script_args)
+
+    # Save results to a CSV file
+    df_results = pd.DataFrame(results)
+
+    filename, ext = os.path.splitext(script_args.results_save_path)
+
+    if mode == 'open':
+        save_path = f"{filename}_open{ext}"
+    else:
+        save_path = f"{filename}_close{ext}"
+
+    df_results.to_csv(save_path, index=False)
+
+    print(f"Results saved to {save_path}")
+
 def metrics_open_ended(open_candidate, open_reference, script_args):
-    # todo CIDEr and SPICE
     open_ques_pre = []
     open_ques_rec = []
     open_ques_f1 = []
@@ -132,6 +224,43 @@ def metrics_open_ended(open_candidate, open_reference, script_args):
 
     print("Results have been written to {}".format(output_path))
 
+def metrics_close_ended(close_candidate, close_reference, script_args):
+    correct_predictions = 0
+    total_predictions = len(close_candidate)
+
+    for answer, result in zip(close_candidate, close_reference):
+        answer = answer.strip().lower()
+        result = str(result).strip().lower()
+        
+        # 判断题的匹配逻辑（“yes”或“no”）
+        if answer in ["yes", "no"]:
+            if answer in result:
+                correct_predictions += 1
+        else:
+            answer_choice = re.search(r'\b([a-d])\.\s?', answer)
+            if answer_choice:
+                answer_choice = answer_choice.group(1)
+                result_choice = re.search(r'\b([a-d])\.\s?', result)
+                if result_choice:
+                    result_choice = result_choice.group(1)
+                else:
+                    result_choice = re.search(r'\b([1-4])\.\s?', result)
+                    choice_map = {'1': 'a', '2': 'b', '3': 'c', '4': 'd'}
+                    if result_choice:
+                        result_choice = choice_map[result_choice.group(1)]
+                
+                if answer_choice == result_choice:
+                    correct_predictions += 1
+
+    print("close question accuracy: {}\n".format(correct_predictions/total_predictions))
+    
+    output_path = script_args.ckpt_path.replace('.bin', '.txt')
+
+    with open(output_path, 'a') as file:
+        file.write("close ended accuracy: {}\n".format(correct_predictions/total_predictions))
+
+    print("Results have been written to {}".format(output_path))
+        
 # Parse arguments and set seed
 parser = HfArgumentParser(ScriptArguments)
 script_args = parser.parse_args_into_dataclasses()[0]
@@ -140,11 +269,13 @@ seed_everything(script_args.seed)
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
+tokenizer.padding_side = 'right'
 tokenizer.truncation_side = 'left'
 
+print(tokenizer.eos_token)
+
 # Add new tokens
-new_tokens = ['<Question>',  '<Answer>', '<Image>']
+new_tokens = ['<Question>', '<Answer>', '<Image>']
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("New tokens IDs:", new_tokens_ids)
@@ -152,9 +283,9 @@ print("New tokens IDs:", new_tokens_ids)
 # Determine data split
 split_text = f"test[:{script_args.select_data_num}]" if script_args.select_data_num > 0 else "test"
 
-
 # if script_args.data_local_dir is None:
-dataset = []
+open_dataset = []
+close_dataset = []
 
 for dataset_name in script_args.dataset_name_list.split(","):
     columns_to_remove = ['slide_id']
@@ -164,19 +295,28 @@ for dataset_name in script_args.dataset_name_list.split(","):
     elif 'site' in one_dataset.column_names:
         columns_to_remove.append('site')
 
-    if 'QA' in dataset_name:
-        columns_to_remove += ['question']
-        one_dataset = one_dataset.map(formatting_func_qa, num_proc=20, remove_columns=columns_to_remove)
+    if 'QA' in dataset_name:  # for QA instruction dataset
+        # columns_to_remove += ['question']
+        if 'Open' in dataset_name: # for OpenQA instruction dataset
+            one_dataset = one_dataset.map(formatting_func_qa_open, num_proc=20, remove_columns=columns_to_remove)
+            open_dataset.append(one_dataset)
+        else: # for CloseQA instruction dataset
+            one_dataset = one_dataset.map(formatting_func_qa_close, num_proc=20, remove_columns=columns_to_remove)
+            close_dataset.append(one_dataset)
     else:
         columns_to_remove += ['description']
         one_dataset = one_dataset.map(formatting_func_des, num_proc=20, remove_columns=columns_to_remove)
-    dataset.append(one_dataset)
-    
-dataset = concatenate_datasets(dataset)
-eval_dataset = dataset
+        open_dataset.append(one_dataset)
+
+if open_dataset!=[]:
+    open_dataset = concatenate_datasets(open_dataset)
+
+if close_dataset!=[]:
+    close_dataset = concatenate_datasets(close_dataset)
 
 # Load model
-print(eval_dataset)
+print(open_dataset)
+print(close_dataset)
 
 model = WPathVLM(script_args.llm_requires_grad, 
                 script_args.load_in_8bit, 
@@ -193,6 +333,18 @@ model = WPathVLM(script_args.llm_requires_grad,
                 data_cache_dir = script_args.data_cache_dir,
                 )
 
+if script_args.use_peft:
+    peft_config = LoraConfig(
+        r=script_args.peft_lora_r,  # Use a moderate rank
+        lora_alpha=script_args.peft_lora_alpha,  # Scaling factor
+        bias="none",  # No bias adaptation
+        task_type="CAUSAL_LM",  # For causal language modeling tasks
+    )
+    model.llm = get_peft_model(model.llm, peft_config)
+    model.llm.print_trainable_parameters()
+else:
+    peft_config = None
+
 model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device))
 model.to(device)
 
@@ -208,62 +360,31 @@ data_collator = MyDataCollatorForWPathVLM(tokenizer=tokenizer,
 # if script_args.adaptor == 'qformer':
 #         remove_columns = []
 #     else:
-remove_columns=['text']
-tokenized_dataset = dataset.map(
-                tokenize,
-                batched=False,
-                remove_columns=remove_columns,
-                num_proc=4,
-                batch_size=script_args.batch_size,
-                input_columns=['text'],
-        )
-            
+
 dataloader_params = {"batch_size": script_args.batch_size, "collate_fn": data_collator, "shuffle": script_args.shuffle}
+remove_columns=['text']
+if open_dataset!=[]:
+    tokenized_open_dataset = open_dataset.map(
+                        tokenize,
+                        batched=False,
+                        remove_columns=remove_columns,
+                        num_proc=4,
+                        batch_size=script_args.batch_size,
+                        input_columns=['text'],
+                        )
+    open_dataloader = DataLoader(tokenized_open_dataset, **dataloader_params)
+    print("### Start evaluating open-ended!")
+    evaluate_model(model, open_dataloader, script_args, mode='open')
 
-eval_dataloader = DataLoader(tokenized_dataset, **dataloader_params)
-
-# Evaluate the model
-ans_list, res_list = [], []
-
-total_batches = len(eval_dataloader)
-
-if eval_sample_size != -1:
-    N = eval_sample_size
-else:
-    N = total_batches
-
-for i, batch in enumerate(tqdm(eval_dataloader)):
-    if i >= N:
-        break
-
-    input_ids = batch['input_ids'].to(device)
-    attention_masks = batch['attention_mask'].to(device)
-    fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
-    mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
-    answers = batch['answers']
-    
-    # Model inference
-    res = model.generate(
-        input_ids=input_ids,
-        attention_mask=attention_masks,
-        fea0=fea0,
-        fea1=fea1,
-        fea2=fea2,
-        mask0=mask0,
-        mask1=mask1,
-        mask2=mask2
-    )
-    
-    ans_list.extend(answers)
-    res_list.extend(res)
-
-results = {
-    "answers": ans_list,
-    "results": res_list
-}
-
-metrics_open_ended(res_list, ans_list, script_args)
-
-df_results = pd.DataFrame(results)
-
-df_results.to_csv(script_args.results_save_path, index=False)
+if close_dataset!=[]:
+    tokenized_close_dataset = close_dataset.map(
+                        tokenize,
+                        batched=False,
+                        remove_columns=remove_columns,
+                        num_proc=4,
+                        batch_size=script_args.batch_size,
+                        input_columns=['text'],
+                        )
+    close_dataloader = DataLoader(tokenized_close_dataset, **dataloader_params)
+    print("### Start evaluating close-ended!")
+    evaluate_model(model, close_dataloader, script_args, mode='close')

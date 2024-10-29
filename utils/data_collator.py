@@ -218,6 +218,9 @@ class MyDataCollatorForPPathVLM(MyDataCollatorForQFormerPatchInstruct):
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
+        self.question_token_id = self.tokenizer.convert_tokens_to_ids('<Question>')
+        self.answer_token_id = self.tokenizer.convert_tokens_to_ids('<Answer>')
+        self.pad_token_id = self.tokenizer.pad_token_id
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         
@@ -251,8 +254,17 @@ class MyDataCollatorForPPathVLM(MyDataCollatorForQFormerPatchInstruct):
         batch["attention_mask"] = torch.tensor(attention_mask_list)
         
         labels = batch["input_ids"].clone()
-        if self.tokenizer.pad_token_id is not None:
-            labels[labels == self.tokenizer.pad_token_id] = -100
+        # process labels -> -100
+        labels[labels == 128000] = -100
+
+        for row in labels:
+            positions = (row == self.pad_token_id).nonzero(as_tuple=True)[0]
+            if len(positions) > 1:
+                row[positions[1:]] = -100
+
+            start_idx = (row == self.question_token_id).nonzero(as_tuple=True)[0]
+            end_idx = (row == self.answer_token_id).nonzero(as_tuple=True)[0]
+            row[start_idx : end_idx + 1] = -100
 
         if self.test:
             batch["answers"] = ans_list
@@ -283,6 +295,9 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
                 "This tokenizer does not have a mask token which is necessary for masked language modeling. "
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
+        self.question_token_id = self.tokenizer.convert_tokens_to_ids('<Question>')
+        self.answer_token_id = self.tokenizer.convert_tokens_to_ids('<Answer>')
+        self.pad_token_id = self.tokenizer.pad_token_id
 
     def __get_nic__(self, features, coords, size): 
         # NIC not use at this moment
@@ -402,12 +417,12 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
 
         if self.test:
             ans_list = []
+            qes_list = []
             for d in examples:
+                qes_list.append(d["question"])
                 ans_list.append(d["answer"])
-                del d["answer"]
-
-
-
+                del d["answer"],d["question"]
+                
         # load from local npy
         for d in examples:
             exa = {}
@@ -452,12 +467,32 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
 
         # If special token mask has been preprocessed, pop it from the dict.
         labels = batch["input_ids"].clone()
-        if self.tokenizer.pad_token_id is not None:
-            labels[labels == self.tokenizer.pad_token_id] = -100
+
+        # process labels -> -100
+        labels[labels == 128000] = -100
+
+        for row in labels:
+            # 处理 pad_token_id
+            positions = (row == self.pad_token_id).nonzero(as_tuple=True)[0]
+            if len(positions) > 1:
+                row[positions[1:]] = -100  # 保留第一个 pad_token_id，其他设置为 -100
+
+            # 处理 question_token_id 和 answer_token_id
+            start_idx = (row == self.question_token_id).nonzero(as_tuple=True)[0]
+            end_idx = (row == self.answer_token_id).nonzero(as_tuple=True)[0]
+
+            # 确保 start_idx 和 end_idx 不为空且为单一整数
+            if len(start_idx) > 0 and len(end_idx) > 0:
+                start_idx = start_idx[0].item()  # 获取第一个匹配的索引并转换为整数
+                end_idx = end_idx[0].item()      # 获取第一个匹配的索引并转换为整数
+
+                if start_idx <= end_idx:
+                    row[start_idx : end_idx + 1] = -100  # 将范围内的值设为 -100
 
         batch["labels"] = labels
         if self.test:
             batch["answers"] = ans_list
+            batch["questions"] = qes_list
 
         for level in range(self.n_level):
             batch["fea{}".format(level)] = torch.stack(fea_list[level])

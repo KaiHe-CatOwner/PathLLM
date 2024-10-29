@@ -4,14 +4,22 @@ einops==0.6.0
 einops_exts==0.0.4
 h5py==3.8.0
 ipykernel==6.22.0
-accelerate==0.29.2
+accelerate==0.31.0
 einops==0.6.0
 open-flamingo==0.0.2
 opencv-python==4.7.0.72
 torch==2.0.0
 torchvision==0.15.1
-transformers==4.39.3
-deepspeed
+salesforce-lavis
+transformers==4.44.2
+deepspeed==0.14.0
 bitsandbytes
 peft==0.10.0
 trl==0.8.3
+numpy==1.26.4
+spacy==3.7.5
+thinc==8.2.4
+blis==0.7.11
+scikit-learn==1.4.2
+triton==2.2.0
+# pip install torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 --index-url https://download.pytorch.org/whl/cu118

@@ -39,8 +39,6 @@ class ScriptArguments:
     data_local_dir: Optional[str] = field(default=None, metadata={"help": "if not None, load from local"})
     fea_root: Optional[str] = field(default="/bask/homes/a/asiw9691/PathVLM/WSI_Dataset/Conch/", metadata={"help": "the root path for WSI feature"})
     ckpt_path: Optional[str] = field(default=None, metadata={"help": "ckpt path"})
-    
-    eval_fold_index: Optional[int] = field(default=9, metadata={"help": "the test fold index"})
 
     # log and save model
     log_with: Optional[str] = field(default="wandb", metadata={"help": "use 'wandb' to log with wandb"})
@@ -90,10 +88,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
+tokenizer.padding_side = 'right'
 tokenizer.truncation_side = 'left'
 
-new_tokens = ['<Question>',  '<Answer>', '<Image>']  
+new_tokens = ['<Question>', '<Answer>', '<Image>']
 num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
@@ -104,14 +102,25 @@ questions = questions[0].tolist()
 def formatting_func_des(examples):
     question = random.choice(questions)
     answer = examples["description"]
-    text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    text = f"<Question> {question} " + f"<Answer> {answer}{tokenizer.eos_token}"
     examples["text"] = text
     return examples
 
-def formatting_func_qa(examples):
+def formatting_func_qa_open(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
+    text = f"<Question> {question} " + f"<Answer> {answer}{tokenizer.eos_token}"
+    examples["text"] = text
+    return examples
+
+def formatting_func_qa_close(examples):
+    question = examples["question"]
+    answer = examples["answer"]
+    if answer.lower() in ['yes', 'no']:
+        prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
+    else:
+        prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
+    text = f"<Question> {prompt} {question} " + f"<Answer> {answer}{tokenizer.eos_token}"
     examples["text"] = text
     return examples
 
@@ -119,7 +128,6 @@ if script_args.select_data_num>0:
     split_text = "train[:{}]".format(script_args.select_data_num)
 else:
     split_text = "train"
-
 
 # if script_args.data_local_dir is None:
 dataset = []
@@ -132,9 +140,12 @@ for dataset_name in script_args.dataset_name_list.split(","):
     elif 'site' in one_dataset.column_names:
         columns_to_remove.append('site')
 
-    if 'QA' in dataset_name:
+    if 'QA' in dataset_name:  # for QA instruction dataset
         columns_to_remove += ['question', 'answer']
-        one_dataset = one_dataset.map(formatting_func_qa, num_proc=20, remove_columns=columns_to_remove)
+        if 'Open' in dataset_name: # for OpenQA instruction dataset
+            one_dataset = one_dataset.map(formatting_func_qa_open, num_proc=20, remove_columns=columns_to_remove)
+        else: # for CloseQA instruction dataset
+            one_dataset = one_dataset.map(formatting_func_qa_close, num_proc=20, remove_columns=columns_to_remove)
     else:
         columns_to_remove += ['description']
         one_dataset = one_dataset.map(formatting_func_des, num_proc=20, remove_columns=columns_to_remove)
@@ -192,7 +203,7 @@ training_args = TrainingArguments(
     gradient_accumulation_steps=script_args.gradient_accumulation_steps,
     # gradient_checkpointing=True,
     learning_rate=script_args.learning_rate,
-    # lr_scheduler_type="cosine",
+    lr_scheduler_type="constant_with_warmup",
     logging_steps=script_args.logging_steps,
     num_train_epochs=script_args.num_train_epochs,
     max_steps=script_args.max_steps,

@@ -3,6 +3,9 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import open_clip
+import gigapath.slide_encoder as slide_encoder
+# from gigapath.pipeline import run_inference_with_slide_encoder
 from torchvision import transforms
 import timm
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, GenerationConfig
@@ -193,7 +196,7 @@ class PPathVLM(nn.Module):
         else:
             device_map = None
             quantization_config = None
-            torch_dtype = None
+            torch_dtype = torch.bfloat16
 
 
         llm = AutoModelForCausalLM.from_pretrained(
@@ -352,6 +355,17 @@ class WPathVLM(PPathVLM):
         
         self.config = self.llm.config
         self.image_token_id = image_token_id
+        
+        # LongNet and CrossAttention
+        if self.agg_strategy == "longnet":
+            self.qury_longnet = [nn.Parameter(torch.zeros(1, 32, embed_dim).to(torch.bfloat16)), 
+                                 nn.Parameter(torch.zeros(1, 16, embed_dim).to(torch.bfloat16)), 
+                                 nn.Parameter(torch.zeros(1, 8, embed_dim).to(torch.bfloat16))]
+            self.longnet_encoder_list = nn.ModuleList([
+                slide_encoder.create_model(pretrained="",model_arch="gigapath_slide_enc2l512d",in_chans=512, global_pool=False) 
+                for _ in range(self.n_level)
+                ])
+            
 
         # Control whether the LLM parameters are trainable
         for param in self.llm.parameters():
@@ -378,12 +392,67 @@ class WPathVLM(PPathVLM):
             agged_WSI_embs = patch_embs
 
         return agged_WSI_embs
-
-    def get_fusion_embedding(self, input_ids, agged_WSI_embs):
+     
+    # used in LongNet+Crossattention
+    def run_inference_with_slide_encoder(self, query,tile_embeds: torch.Tensor, coords: torch.Tensor, slide_encoder_model: torch.nn.Module, patch_size) -> torch.Tensor:
+        """         
+        Run inference with the slide encoder
+                
+        Arguments:  
+        ----------  
+        tile_embeds : torch.Tensor
+            Tile embeddings
+        coords : torch.Tensor
+            Coordinates of the tiles
+        slide_encoder_model : torch.nn.Module
+            Slide encoder model
+        """     
+        if len(tile_embeds.shape) == 2:
+            tile_embeds = tile_embeds.unsqueeze(0)
+            coords = coords.unsqueeze(0) 
+                    
+        # slide_encoder_model = slide_encoder_model.cuda()
+        # print("1:{}".format(torch.cuda.memory_allocated(0)))
+        slide_encoder_model = slide_encoder_model.cuda()
+                      
+        # print("2:{}".format(torch.cuda.memory_allocated(0)))
+        # slide_encoder_model.eval()
+         # run inference
+        with torch.cuda.amp.autocast(dtype=torch.float16):
+            # slide_embeds = slide_encoder_model(tile_embeds.cuda(), coords.cuda(), all_layer_embed=True)
+            slide_embeds = slide_encoder_model(query.cuda(), tile_embeds.cuda(), coords.cuda(), patch_size.cuda(), all_layer_embed=False)
+        # outputs = {"layer_{}_embed".format(i): slide_embeds[i].cuda() for i in range(len(slide_embeds))}
+        # outputs["last_layer_embed"] = slide_embeds[-1].cuda()
+        # print("3:{}".format(torch.cuda.memory_allocated(0)))
+        return slide_embeds
+    def get_fusion_embedding(self, input_ids, agged_WSI_embs, coordinate=None):
+        
         token_embs = self.embedding_layer(input_ids)
         image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(agged_WSI_embs[0].device))
         batch_image_token_emb = image_token_emb.repeat(agged_WSI_embs[0].size(0), 1, 1)
+        
+        if self.agg_strategy == "longnet":
+            #define 3 levels of lone net
+            #first use corresponding query to calculate result for each resolution
+            #concat all the query result together
+            #return as the final result
+            patch_size_dict = {0:1024.0,1:2048.0,2:4096.0}
+            patch_size_dict = {key: torch.tensor([value]) for key, value in patch_size_dict.items()}
+
+            queryed_result = []
+            for level in  range(self.n_level):
+                queryed_result.append(
+                    self.run_inference_with_slide_encoder(query=self.qury_longnet[level].repeat(agged_WSI_embs[level].shape[0],1,1), 
+                                                                    slide_encoder_model=self.longnet_encoder_list[level], 
+                                                                    tile_embeds=agged_WSI_embs[level],
+                                                                    coords=coordinate[level],
+                                                                    patch_size=patch_size_dict[level].to(torch.bfloat16))
+                               )
+            agged_WSI_embs = queryed_result
+
         agged_WSI_embs = torch.cat(agged_WSI_embs, dim=1)
+        agged_WSI_embs = self.resampler_layer(agged_WSI_embs) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+        # print("4:{}".format(torch.cuda.memory_allocated(0)))
         fusion_embs =  torch.cat((batch_image_token_emb, agged_WSI_embs, token_embs), dim=1)
         return fusion_embs
 
@@ -404,15 +473,18 @@ class WPathVLM(PPathVLM):
         with torch.no_grad():
             input_ids = kwargs["input_ids"]
             text_attention_mask = kwargs["attention_mask"]
+            # labels = kwargs["labels"]
             agged_WSI_embs = []
+            corrds = []
+            
             for level in range(self.n_level):
-                patch_embs = kwargs["fea{}".format(level)].to(torch.float) # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
+                patch_embs = kwargs["fea{}".format(level)].float() # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
                 patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
                 agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
-                agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+                #agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
                 agged_WSI_embs.append(agged_WSI_embs_level)
-
-            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs) # wsi token is on the left
+                corrds.append(kwargs["cor{}".format(level)])
+            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs, coordinate=corrds).to(torch.float16)
             text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
 
             res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, generation_config=generation_config)
@@ -428,15 +500,16 @@ class WPathVLM(PPathVLM):
         text_attention_mask = kwargs["attention_mask"]
         labels = kwargs["labels"]
         agged_WSI_embs = []
+        corrds = []
         
         for level in range(self.n_level):
             patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
             patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
             agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
-            agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
+            # agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
             agged_WSI_embs.append(agged_WSI_embs_level)
-        
-        fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
+            corrds.append(kwargs["cor{}".format(level)])
+        fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs, coordinate=corrds)
         text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
         labels = self.pad_label_fusion(fusion_embs.size(1), labels)
 

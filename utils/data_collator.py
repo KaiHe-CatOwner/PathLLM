@@ -431,7 +431,7 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
                 fea_name = self.fea_name_list[i]
                 fea_path_ori = d[fea_name]
                 del d[fea_name]
-                if self.agg_strategy == 'abmil':
+                if self.agg_strategy == 'abmil' or self.agg_strategy == 'longnet':
                     f, cor = self.__load_full_feature__(fea_path_ori)
                 elif self.agg_strategy == 'sample':
                     f, cor = self.__load_full_feature__(fea_path_ori)

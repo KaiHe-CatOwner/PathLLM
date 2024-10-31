@@ -345,6 +345,14 @@ class WPathVLM(PPathVLM):
                 for i in range(self.n_level)
             ])
 
+        # LongNet + CrossAttention
+        if self.agg_strategy == "longnet":
+            self.qury_longnet = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim).to(torch.bfloat16)) for i in range(self.n_level)]
+            self.longnet_encoder_list = nn.ModuleList([
+                slide_encoder.create_model(pretrained="",model_arch="gigapath_slide_enc2l512d",in_chans=512, global_pool=False) 
+                for _ in range(self.n_level)
+                ])
+
         # self.fusion_layer_E = torch.nn.TransformerEncoderLayer(self.llm.config.hidden_size, 8, batch_first=True)
         self.resampler_layer = nn.Sequential(
             nn.LayerNorm(self.embed_dim),
@@ -355,23 +363,13 @@ class WPathVLM(PPathVLM):
         
         self.config = self.llm.config
         self.image_token_id = image_token_id
-        
-        # LongNet and CrossAttention
-        if self.agg_strategy == "longnet":
-            self.qury_longnet = [nn.Parameter(torch.zeros(1, 32, embed_dim).to(torch.bfloat16)), 
-                                 nn.Parameter(torch.zeros(1, 16, embed_dim).to(torch.bfloat16)), 
-                                 nn.Parameter(torch.zeros(1, 8, embed_dim).to(torch.bfloat16))]
-            self.longnet_encoder_list = nn.ModuleList([
-                slide_encoder.create_model(pretrained="",model_arch="gigapath_slide_enc2l512d",in_chans=512, global_pool=False) 
-                for _ in range(self.n_level)
-                ])
             
 
         # Control whether the LLM parameters are trainable
         for param in self.llm.parameters():
             param.requires_grad = llm_requires_grad
 
-    def get_wsi_embedding(self, patch_embs, patch_masks, level):
+    def get_wsi_embedding(self, patch_embs, patch_masks, corrds, level):
 
         if self.agg_strategy == 'abmil': 
 
@@ -387,6 +385,16 @@ class WPathVLM(PPathVLM):
             mapped_patch_embs = patch_embs_flattened.view(batch_size, num_patches, embedding_size) # shape (bz, np, 512)
             agged_WSI_embs = patch_attention_matrices.unsqueeze(-1) * mapped_patch_embs.unsqueeze(-2)  # shape (bz, np, n_heads, 512)
             agged_WSI_embs = torch.sum(agged_WSI_embs, dim=1) # (bz, n_heads, 512)
+
+        elif self.agg_strategy == "longnet":
+
+            patch_size_dict = {0:1024.0, 1:2048.0, 2:4096.0}
+            patch_size_dict = {key: torch.tensor([value]) for key, value in patch_size_dict.items()}
+            agged_WSI_embs = self.run_inference_with_slide_encoder(query=self.qury_longnet[level].repeat(patch_embs.shape[0],1,1), 
+                                                slide_encoder_model=self.longnet_encoder_list[level], 
+                                                tile_embeds=patch_embs,
+                                                coords=corrds,
+                                                patch_size=patch_size_dict[level].to(torch.bfloat16))
         
         else: # "sample, kmeans, gmm"
             agged_WSI_embs = patch_embs
@@ -425,30 +433,12 @@ class WPathVLM(PPathVLM):
         # outputs["last_layer_embed"] = slide_embeds[-1].cuda()
         # print("3:{}".format(torch.cuda.memory_allocated(0)))
         return slide_embeds
-    def get_fusion_embedding(self, input_ids, agged_WSI_embs, coordinate=None):
+
+    def get_fusion_embedding(self, input_ids, agged_WSI_embs):
         
         token_embs = self.embedding_layer(input_ids)
         image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(agged_WSI_embs[0].device))
         batch_image_token_emb = image_token_emb.repeat(agged_WSI_embs[0].size(0), 1, 1)
-        
-        if self.agg_strategy == "longnet":
-            #define 3 levels of lone net
-            #first use corresponding query to calculate result for each resolution
-            #concat all the query result together
-            #return as the final result
-            patch_size_dict = {0:1024.0,1:2048.0,2:4096.0}
-            patch_size_dict = {key: torch.tensor([value]) for key, value in patch_size_dict.items()}
-
-            queryed_result = []
-            for level in  range(self.n_level):
-                queryed_result.append(
-                    self.run_inference_with_slide_encoder(query=self.qury_longnet[level].repeat(agged_WSI_embs[level].shape[0],1,1), 
-                                                                    slide_encoder_model=self.longnet_encoder_list[level], 
-                                                                    tile_embeds=agged_WSI_embs[level],
-                                                                    coords=coordinate[level],
-                                                                    patch_size=patch_size_dict[level].to(torch.bfloat16))
-                               )
-            agged_WSI_embs = queryed_result
 
         agged_WSI_embs = torch.cat(agged_WSI_embs, dim=1)
         agged_WSI_embs = self.resampler_layer(agged_WSI_embs) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
@@ -475,16 +465,15 @@ class WPathVLM(PPathVLM):
             text_attention_mask = kwargs["attention_mask"]
             # labels = kwargs["labels"]
             agged_WSI_embs = []
-            corrds = []
             
             for level in range(self.n_level):
                 patch_embs = kwargs["fea{}".format(level)].float() # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
                 patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
-                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
+                corrds = kwargs["cor{}".format(level)]
+                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level)
                 #agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
                 agged_WSI_embs.append(agged_WSI_embs_level)
-                corrds.append(kwargs["cor{}".format(level)])
-            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs, coordinate=corrds).to(torch.float16)
+            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs).to(torch.float16)
             text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
 
             res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, generation_config=generation_config)
@@ -500,16 +489,15 @@ class WPathVLM(PPathVLM):
         text_attention_mask = kwargs["attention_mask"]
         labels = kwargs["labels"]
         agged_WSI_embs = []
-        corrds = []
         
         for level in range(self.n_level):
             patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
             patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
-            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, level)
+            corrds = kwargs["cor{}".format(level)]
+            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level)
             # agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
             agged_WSI_embs.append(agged_WSI_embs_level)
-            corrds.append(kwargs["cor{}".format(level)])
-        fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs, coordinate=corrds)
+        fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
         text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
         labels = self.pad_label_fusion(fusion_embs.size(1), labels)
 

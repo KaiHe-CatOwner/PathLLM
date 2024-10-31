@@ -22,11 +22,11 @@ source /bask/projects/p/phwq4930-renal-canc/Zeyu/pyvenv/pathllm/bin/activate
 export WANDB_MODE=online
 
 accelerate launch --config_file=./accelerate_configs/deepspeed_zero2.yaml run_wsi.py --max_steps 20_000 --warmup_steps 1000\
-        --gpu 2 --train_batch_size 4 --eval_batch_size 2 --max_seq_length 512 --resume_from_checkpoint True \
-        --output_dir ./output/WSI_ConchLlama3.1_abmil_QA_Stage1 --agg_strategy abmil --embed_dim 512\
+        --gpu 2 --train_batch_size 4 --eval_batch_size 2 --max_seq_length 512 --resume_from_checkpoint False \
+        --output_dir ./output/WSI_ConchLlama3.1_abmil_QA_Stage1_newtoken --agg_strategy abmil --embed_dim 512\
         --llm_name meta-llama/Meta-Llama-3.1-8B-Instruct \
         --dataset_name_list CNX-PathLLM/TCGA-WSI-Description-4onew,CNX-PathLLM/TCGA-WSI-Description-4omini,CNX-PathLLM/GTEx-WSI-Description \
-        --data_cache_dir /bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/.cache \
+        --data_cache_dir "/bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/.cache" \
         --fea_root /bask/homes/a/asiw9691/PathVLM/WSI_Dataset/Conch \
         --n_heads 32,16,8 --llm_requires_grad True
 

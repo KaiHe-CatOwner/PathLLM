@@ -63,7 +63,7 @@ class ScriptArguments:
     # WSI hyperparam
     n_level: Optional[int] = field(default=3, metadata={"help": "the number of herachical levels for WSI embedding"})
     embed_dim: Optional[int] = field(default=512, metadata={"help": "embedding dimension of each patch, conch: 512, gmm: 2*d+1"})
-    agg_strategy: Optional[str] = field(default='abmil', metadata={"help": "the strategy for WSI aggregation, sample, kmeans, gmm, abmil"})
+    agg_strategy: Optional[str] = field(default='abmil', metadata={"help": "the strategy for WSI aggregation, sample, kmeans, gmm, abmil, longnet"})
     n_heads: Optional[str] = field(default='32,16,8', metadata={"help": "the number of attention heads for WSI aggregation, for sample and abmil"})
     
     # eval
@@ -87,12 +87,14 @@ os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
-tokenizer.pad_token = tokenizer.eos_token
+#tokenizer.pad_token = tokenizer.eos_token
+tokenizer.pad_token = "<|finetune_right_pad_id|>"
 tokenizer.padding_side = 'right'
-tokenizer.truncation_side = 'left'
+tokenizer.truncation_side = 'right'
 
-new_tokens = ['<Question>', '<Answer>', '<Image>']
-num_added_toks = tokenizer.add_tokens(new_tokens)
+new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
+# num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
 
@@ -102,14 +104,14 @@ questions = questions[0].tolist()
 def formatting_func_des(examples):
     question = random.choice(questions)
     answer = examples["description"]
-    text = f"<Question> {question} " + f"<Answer> {answer}{tokenizer.eos_token}"
+    text = f"<|Question|>{question}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
     examples["text"] = text
     return examples
 
 def formatting_func_qa_open(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<Question> {question} " + f"<Answer> {answer}{tokenizer.eos_token}"
+    text = f"<|Question|>{question}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
     examples["text"] = text
     return examples
 
@@ -120,7 +122,8 @@ def formatting_func_qa_close(examples):
         prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
     else:
         prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
-    text = f"<Question> {prompt} {question} " + f"<Answer> {answer}{tokenizer.eos_token}"
+    
+    text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
     examples["text"] = text
     return examples
 

@@ -72,7 +72,7 @@ class ScriptArguments:
 def formatting_func_des(examples):
     question = random.choice(questions)
     answer = examples["description"]
-    text = f"<Question> {question} " + f"<Answer> "
+    text = f"<|Question|>{question} " + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     examples["question"] = question
@@ -81,7 +81,7 @@ def formatting_func_des(examples):
 def formatting_func_qa_open(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<Question> {question} " + f"<Answer> "
+    text = f"<|Question|>{question}" + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -93,7 +93,7 @@ def formatting_func_qa_close(examples):
         prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
     else:
         prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
-    text = f"<Question> {prompt} {question} " + f"<Answer> "
+    text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -275,8 +275,8 @@ tokenizer.truncation_side = 'left'
 print(tokenizer.eos_token)
 
 # Add new tokens
-new_tokens = ['<Question>', '<Answer>', '<Image>']
-num_added_toks = tokenizer.add_tokens(new_tokens)
+new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("New tokens IDs:", new_tokens_ids)
 

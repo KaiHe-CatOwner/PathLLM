@@ -8,8 +8,8 @@
 #SBATCH --time 3-0:0:0
 #SBATCH --mem 256G
 #SBATCH --constraint=a100_80
-#SBATCH -o ./logs/slurm_wsi_kmeans_s2_lora.%N.%j.out # STDOUT
-#SBATCH -e ./logs/slurm_wsi_kmeans_s2_lora.%N.%j.err # STDERR
+#SBATCH -o ./logs/slurm_wsi_longnet_s2.%N.%j.out # STDOUT
+#SBATCH -e ./logs/slurm_wsi_longnet_s2.%N.%j.err # STDERR
 
 module purge
 module load bask-apps/live
@@ -22,13 +22,14 @@ source /bask/projects/p/phwq4930-renal-canc/Zeyu/pyvenv/pathllm/bin/activate
 export WANDB_MODE=online
 
 accelerate launch --config_file=./accelerate_configs/deepspeed_zero2.yaml run_wsi.py --max_steps 20_000 --warmup_steps 1000\
-        --gpu 2 --train_batch_size 8 --eval_batch_size 2 --max_seq_length 128 --resume_from_checkpoint False \
-        --output_dir ./output/WSI_ConchLlama3.1_kmeans_QA_Stage2_lora --agg_strategy kmeans --embed_dim 512\
+        --gpu 2 --train_batch_size 8 --eval_batch_size 2 --max_seq_length 256 --resume_from_checkpoint False \
+        --output_dir ./output/WSI_ConchLlama3.1_longnet_QA_Stage2_newtoken --agg_strategy longnet --embed_dim 512\
         --llm_name meta-llama/Meta-Llama-3.1-8B-Instruct \
         --dataset_name_list CNX-PathLLM/TCGA-WSI-CloseQA-Balanced,CNX-PathLLM/GTEx-WSI-CloseQA-Balanced,CNX-PathLLM/TCGA-WSI-OpenQA,CNX-PathLLM/GTEx-WSI-OpenQA\
         --data_cache_dir "/bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/.cache" \
         --fea_root /bask/homes/a/asiw9691/PathVLM/WSI_Dataset/Conch \
-        --n_heads 32,16,8 --llm_requires_grad True --use_peft True --peft_lora_r 8
+        --n_heads 32,16,8 --llm_requires_grad True 
+        # --use_peft True --peft_lora_r 8
 
         # --use_peft False --peft_lora_r 8  # Conch_CC GMM_PT
 # --use_peft True --peft_lora_r 8 

@@ -93,7 +93,8 @@ def formatting_func_qa_close(examples):
         prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
     else:
         prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
-    text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
+    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
+    text = f"<|Question|>{question}" + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -134,6 +135,7 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         input_ids = batch['input_ids'].to(device)
         attention_masks = batch['attention_mask'].to(device)
         fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
+        cor0, cor1, cor2 = batch['cor0'].to(device), batch['cor1'].to(device), batch['cor2'].to(device)
         mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
         
         questions = batch['questions']
@@ -143,12 +145,9 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         res = model.generate(
             input_ids=input_ids,
             attention_mask=attention_masks,
-            fea0=fea0,
-            fea1=fea1,
-            fea2=fea2,
-            mask0=mask0,
-            mask1=mask1,
-            mask2=mask2
+            fea0=fea0, fea1=fea1, fea2=fea2,
+            mask0=mask0, mask1=mask1, mask2=mask2,
+            cor0=cor0, cor1=cor1, cor2=cor2,
         )
 
         # Collect results
@@ -268,8 +267,9 @@ seed_everything(script_args.seed)
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = 'right'
+# tokenizer.pad_token = tokenizer.eos_token
+tokenizer.pad_token = "<|finetune_right_pad_id|>"
+tokenizer.padding_side = 'left'
 tokenizer.truncation_side = 'left'
 
 print(tokenizer.eos_token)

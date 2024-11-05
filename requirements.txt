@@ -22,4 +22,5 @@ thinc==8.2.4
 blis==0.7.11
 scikit-learn==1.4.2
 triton==2.2.0
+flash-attn==2.6.3
 # pip install torch==2.2.1 torchvision==0.17.1 torchaudio==2.2.1 --index-url https://download.pytorch.org/whl/cu118

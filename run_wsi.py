@@ -3,6 +3,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 import os
 import ast
 import random
+import torch
 import pandas as pd
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
@@ -29,10 +30,10 @@ class ScriptArguments:
     seed: Optional[int] = field(default=42, metadata={"help": "seed"})
 
     # model
-    llm_name: Optional[str] = field(default="meta-llama/Meta-Llama-3.1-8B", metadata={"help": "the model name， mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B"})
+    llm_name: Optional[str] = field(default="meta-llama/Meta-Llama-3.1-8B", metadata={"help": "the model name, mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B"})
     
     # data
-    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
+    select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data, -1 mean use all data"})
     dataset_name_list: Optional[str] = field(default="CNX-PathLLM/TCGA-WSI-Description, CNX-PathLLM/GTEx-WSI-Description")
     dataset_text_field: Optional[str] = field(default="text", metadata={"help": "the text field of the dataset"})
     data_cache_dir: Optional[str] = field(default="~/.cache", metadata={"help": "the cache dir the dataset and model, /bask/projects/p/phwq4930-gbm/Zeyu/PathVLM/.cache"})
@@ -63,7 +64,7 @@ class ScriptArguments:
     # WSI hyperparam
     n_level: Optional[int] = field(default=3, metadata={"help": "the number of herachical levels for WSI embedding"})
     embed_dim: Optional[int] = field(default=512, metadata={"help": "embedding dimension of each patch, conch: 512, gmm: 2*d+1"})
-    agg_strategy: Optional[str] = field(default='abmil', metadata={"help": "the strategy for WSI aggregation, sample, kmeans, gmm, abmil, longnet"})
+    agg_strategy: Optional[str] = field(default='abmil', metadata={"help": "the strategy for WSI aggregation, sample, kmeans, gmm, abmil, qformer, longnet"})
     n_heads: Optional[str] = field(default='32,16,8', metadata={"help": "the number of attention heads for WSI aggregation, for sample and abmil"})
     
     # eval
@@ -84,6 +85,7 @@ seed_everything(script_args.seed)
 # os.environ["WANDB_MODE"] = "offline"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
+device = 'cuda'
 
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
@@ -123,7 +125,8 @@ def formatting_func_qa_close(examples):
     else:
         prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
     
-    text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
+    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
+    text = f"<|Question|>{question}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
     examples["text"] = text
     return examples
 

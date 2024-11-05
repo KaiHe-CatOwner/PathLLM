@@ -81,7 +81,7 @@ def formatting_func_des(examples):
 def formatting_func_qa_open(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<|Question|>{question}" + f"<|Answer|>"
+    text = f"<|Question|>{question} " + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -94,6 +94,7 @@ def formatting_func_qa_close(examples):
     else:
         prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
     text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
+    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -134,21 +135,20 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         input_ids = batch['input_ids'].to(device)
         attention_masks = batch['attention_mask'].to(device)
         fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
+        cor0, cor1, cor2 = batch['cor0'].to(device), batch['cor1'].to(device), batch['cor2'].to(device)
         mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
         
         questions = batch['questions']
         answers = batch['answers']
+        slide_ids = batch['slide_ids']
 
         # Model inference
         res = model.generate(
             input_ids=input_ids,
             attention_mask=attention_masks,
-            fea0=fea0,
-            fea1=fea1,
-            fea2=fea2,
-            mask0=mask0,
-            mask1=mask1,
-            mask2=mask2
+            fea0=fea0, fea1=fea1, fea2=fea2,
+            mask0=mask0, mask1=mask1, mask2=mask2,
+            cor0=cor0, cor1=cor1, cor2=cor2,
         )
 
         # Collect results
@@ -158,9 +158,10 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
 
     # Save results in a dictionary
     results = {
+        "slide_ids": slide_ids,
         "questions": qes_list,
         "answers": ans_list,
-        "results": res_list
+        "results": res_list,
     }
 
     # Evaluate using the specified metrics function
@@ -268,14 +269,14 @@ seed_everything(script_args.seed)
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = 'right'
+# tokenizer.pad_token = tokenizer.eos_token
+tokenizer.pad_token = "<|finetune_right_pad_id|>"
+tokenizer.padding_side = 'left'
 tokenizer.truncation_side = 'left'
-
-print(tokenizer.eos_token)
 
 # Add new tokens
 new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+# num_added_toks = tokenizer.add_tokens(new_tokens)
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("New tokens IDs:", new_tokens_ids)
@@ -288,7 +289,8 @@ open_dataset = []
 close_dataset = []
 
 for dataset_name in script_args.dataset_name_list.split(","):
-    columns_to_remove = ['slide_id']
+    # columns_to_remove = ['slide_id'] # keep slide id
+    columns_to_remove = []
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     if 'project' in one_dataset.column_names:
         columns_to_remove.append('project')
@@ -346,6 +348,7 @@ else:
     peft_config = None
 
 model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device))
+# model = model.to(torch.bfloat16)
 model.to(device)
 
 # Prepare data loader

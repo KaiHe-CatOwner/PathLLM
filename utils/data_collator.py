@@ -428,10 +428,12 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         if self.test:
             ans_list = []
             qes_list = []
+            slide_id_list = []
             for d in examples:
                 qes_list.append(d["question"])
                 ans_list.append(d["answer"])
-                del d["answer"],d["question"]
+                slide_id_list.append(d["slide_id"])
+                del d["question"],d["answer"],d["slide_id"]
                 
         # load img embeddings from local npy
         for d in examples:
@@ -486,7 +488,7 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         labels[labels == self.pad_token_id] = -100
 
         for row in labels:
-            # 处理 pad_token_id
+            # # 处理 pad_token_id
             # positions = (row == self.pad_token_id).nonzero(as_tuple=True)[0]
             # if len(positions) > 1:
             #     row[positions[1:]] = -100  # 保留第一个 pad_token_id，其他设置为 -100
@@ -510,6 +512,7 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         if self.test:
             batch["answers"] = ans_list
             batch["questions"] = qes_list
+            batch["slide_ids"] = slide_id_list
 
         for level in range(self.n_level):
             batch["fea{}".format(level)] = torch.stack(fea_list[level])

@@ -196,7 +196,8 @@ class PPathVLM(nn.Module):
         else:
             device_map = None
             quantization_config = None
-            torch_dtype = torch.bfloat16
+            torch_dtype = None
+            # torch_dtype = torch.bfloat16
 
 
         llm = AutoModelForCausalLM.from_pretrained(
@@ -347,7 +348,7 @@ class WPathVLM(PPathVLM):
 
         # LongNet + CrossAttention
         if self.agg_strategy == "longnet":
-            self.qury_longnet = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim).to(torch.bfloat16)) for i in range(self.n_level)]
+            self.qury_longnet = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)] # to(torch.bfloat16)
             self.longnet_encoder_list = nn.ModuleList([
                 slide_encoder.create_model(pretrained="",model_arch="gigapath_slide_enc2l512d",in_chans=512, global_pool=False) 
                 for _ in range(self.n_level)
@@ -394,7 +395,7 @@ class WPathVLM(PPathVLM):
                                                 slide_encoder_model=self.longnet_encoder_list[level], 
                                                 tile_embeds=patch_embs,
                                                 coords=corrds,
-                                                patch_size=patch_size_dict[level].to(torch.bfloat16))
+                                                patch_size=patch_size_dict[level]) # .to(torch.bfloat16)
         
         else: # "sample, kmeans, gmm"
             agged_WSI_embs = patch_embs
@@ -402,7 +403,7 @@ class WPathVLM(PPathVLM):
         return agged_WSI_embs
      
     # used in LongNet+Crossattention
-    def run_inference_with_slide_encoder(self, query,tile_embeds: torch.Tensor, coords: torch.Tensor, slide_encoder_model: torch.nn.Module, patch_size) -> torch.Tensor:
+    def run_inference_with_slide_encoder(self, query, tile_embeds: torch.Tensor, coords: torch.Tensor, slide_encoder_model: torch.nn.Module, patch_size) -> torch.Tensor:
         """         
         Run inference with the slide encoder
                 
@@ -472,8 +473,8 @@ class WPathVLM(PPathVLM):
                 corrds = kwargs["cor{}".format(level)]
                 agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level)
                 #agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
-                agged_WSI_embs.append(agged_WSI_embs_level)
-            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs).to(torch.float16)
+                agged_WSI_embs.append(agged_WSI_embs_level.float())
+            fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs) #.to(torch.bfloat16)
             text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
 
             res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, generation_config=generation_config)

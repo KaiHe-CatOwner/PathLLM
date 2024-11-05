@@ -24,13 +24,24 @@ module load cuDNN/8.7.0.84-CUDA-11.8.0
 
 source /bask/projects/p/phwq4930-renal-canc/Zeyu/pyvenv/pathllm/bin/activate
 
+# test Q&A
 python test_wsi.py --max_seq_length 128 --batch_size 4 --select_data_num -1 --llm_name meta-llama/Meta-Llama-3.1-8B-Instruct \
                     --shuffle False --data_cache_dir /bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/.cache \
                     --dataset_name_list CNX-PathLLM/TCGA-WSI-CloseQA-Balanced,CNX-PathLLM/GTEx-WSI-CloseQA-Balanced,CNX-PathLLM/TCGA-WSI-OpenQA,CNX-PathLLM/GTEx-WSI-OpenQA  \
+                    --eval_sample_size -1 --n_heads 32,16,8 --agg_strategy longnet --embed_dim 512 \
+                    --fea_root /bask/homes/a/asiw9691/PathVLM/WSI_Dataset/Conch \
+                    --ckpt_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_longnet_QA_Stage2_newtoken/ckpt2000.bin\
+                    --results_save_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_longnet_QA_Stage2_newtoken/ckpt2000.csv\
+
+# test Des
+python test_wsi.py --max_seq_length 128 --batch_size 4 --select_data_num -1 --llm_name meta-llama/Meta-Llama-3.1-8B-Instruct \
+                    --shuffle False --data_cache_dir /bask/projects/p/phwq4930-renal-canc/Zeyu/PathVLM/.cache \
+                    --dataset_name_list CNX-PathLLM/TCGA-WSI-Description-4onew,CNX-PathLLM/TCGA-WSI-Description-4omini,CNX-PathLLM/GTEx-WSI-Description   \
                     --eval_sample_size -1 --n_heads 32,16,8 --agg_strategy abmil --embed_dim 512 \
                     --fea_root /bask/homes/a/asiw9691/PathVLM/WSI_Dataset/Conch \
-                    --ckpt_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_abmil_QA_Stage2/ckpt4000.bin\
-                    --use_peft True --peft_lora_r 8 \
+                    --ckpt_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_abmil_QA_Stage1_newtoken/ckpt5000.bin\
+                    --results_save_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_abmil_QA_Stage1_newtoken/ckpt5000.csv\
+                    # --use_peft True --peft_lora_r 8 \
 
                     # CNX-PathLLM/TCGA-WSI-Description-4onew,CNX-PathLLM/TCGA-WSI-Description-4omini,CNX-PathLLM/GTEx-WSI-Description 
                     # CNX-PathLLM/TCGA-WSI-CloseQA-Balanced,CNX-PathLLM/GTEx-WSI-CloseQA-Balanced,CNX-PathLLM/TCGA-WSI-OpenQA,CNX-PathLLM/GTEx-WSI-OpenQA

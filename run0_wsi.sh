@@ -22,7 +22,7 @@ source /bask/projects/p/phwq4930-renal-canc/Zeyu/pyvenv/pathllm/bin/activate
 export WANDB_MODE=online
 
 accelerate launch --config_file=./accelerate_configs/deepspeed_zero2.yaml run_wsi.py --max_steps 20_000 --warmup_steps 1000\
-        --gpu 2 --train_batch_size 8 --eval_batch_size 2 --max_seq_length 256 --resume_from_checkpoint False \
+        --gpu 2 --train_batch_size 8 --eval_batch_size 2 --max_seq_length 256 --resume_from_checkpoint True \
         --output_dir ./output/WSI_ConchLlama3.1_abmil_QA_Stage2_newtoken --agg_strategy abmil --embed_dim 512\
         --llm_name meta-llama/Meta-Llama-3.1-8B-Instruct \
         --dataset_name_list CNX-PathLLM/TCGA-WSI-CloseQA-Balanced,CNX-PathLLM/GTEx-WSI-CloseQA-Balanced,CNX-PathLLM/TCGA-WSI-OpenQA,CNX-PathLLM/GTEx-WSI-OpenQA\

@@ -86,6 +86,7 @@ seed_everything(script_args.seed)
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = script_args.gpu
 device = 'cuda'
+print(script_args)
 
 # set up tokenizer
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
@@ -245,6 +246,8 @@ if script_args.ckpt_path is not None:
     # model = model.to(torch.bfloat16)
     print("load pre-trained model from: {}".format(script_args.ckpt_path))
     model.print_llm_parameters()
+else:
+    print("no pretrained weights loaded from users!")
 
 data_collator = MyDataCollatorForWPathVLM(tokenizer=tokenizer, 
                                         fea_root=script_args.fea_root, 

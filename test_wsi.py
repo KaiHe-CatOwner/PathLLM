@@ -81,7 +81,7 @@ def formatting_func_des(examples):
 def formatting_func_qa_open(examples):
     question = examples["question"]
     answer = examples["answer"]
-    text = f"<|Question|>{question}" + f"<|Answer|>"
+    text = f"<|Question|>{question} " + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -93,8 +93,9 @@ def formatting_func_qa_close(examples):
         prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
     else:
         prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
-    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
+
     text = f"<|Question|>{question}" + f"<|Answer|>"
+    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
     examples["text"] = text
     examples["answer"] = answer
     return examples
@@ -140,6 +141,7 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         
         questions = batch['questions']
         answers = batch['answers']
+        slide_ids = batch['slide_ids']
 
         # Model inference
         res = model.generate(
@@ -157,9 +159,10 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
 
     # Save results in a dictionary
     results = {
+        "slide_ids": slide_ids,
         "questions": qes_list,
         "answers": ans_list,
-        "results": res_list
+        "results": res_list,
     }
 
     # Evaluate using the specified metrics function
@@ -272,10 +275,9 @@ tokenizer.pad_token = "<|finetune_right_pad_id|>"
 tokenizer.padding_side = 'left'
 tokenizer.truncation_side = 'left'
 
-print(tokenizer.eos_token)
-
 # Add new tokens
 new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+# num_added_toks = tokenizer.add_tokens(new_tokens)
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("New tokens IDs:", new_tokens_ids)
@@ -288,7 +290,8 @@ open_dataset = []
 close_dataset = []
 
 for dataset_name in script_args.dataset_name_list.split(","):
-    columns_to_remove = ['slide_id']
+    # columns_to_remove = ['slide_id'] # keep slide id
+    columns_to_remove = []
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     if 'project' in one_dataset.column_names:
         columns_to_remove.append('project')
@@ -346,6 +349,7 @@ else:
     peft_config = None
 
 model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device))
+# model = model.to(torch.bfloat16)
 model.to(device)
 
 # Prepare data loader

@@ -1,6 +1,11 @@
 # PathLLM# PathLLM
 
 ## Longnet ##
+
+(1) --vision_adaptor False --hierachical_adaptor True
+(2) --vision_adaptor False --hierachical_adaptor False
+(3) --vision_adaptor True --hierachical_adaptor True
+
 ```
 
 --vision_adaptor False (vision-query-question interaction)

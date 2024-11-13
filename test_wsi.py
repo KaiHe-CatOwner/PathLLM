@@ -40,8 +40,9 @@ class ScriptArguments:
     llm_name: Optional[str] = field(default="meta-llama/Meta-Llama-3-8B", metadata={"help": "The model name"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
-    vision_adaptor: Optional[bool] = field(default=False, metadata={"help": "True or  False"})
+    vision_adaptor: Optional[bool] = field(default=False, metadata={"help": "True or  False, only for longnet and qformer"})
     hierachical_token: Optional[bool] = field(default=True, metadata={"help": "True or  False"})
+    hierachical_adaptor: Optional[bool] = field(default=True, metadata={"help": "True or  False, only for longnet and qformer"})
     
     # Data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
@@ -310,6 +311,7 @@ if script_args.vision_adaptor:
                             embed_dim = script_args.embed_dim,
                             agg_strategy = script_args.agg_strategy,
                             hierachical_token = script_args.hierachical_token,
+                            hierachical_adaptor=script_args.hierachical_adaptor,
                             data_cache_dir = script_args.data_cache_dir,
                             )
 else:
@@ -326,6 +328,7 @@ else:
                     embed_dim = script_args.embed_dim,
                     agg_strategy = script_args.agg_strategy,
                     hierachical_token = script_args.hierachical_token,
+                    hierachical_adaptor=script_args.hierachical_adaptor,
                     data_cache_dir = script_args.data_cache_dir,
                     )
 

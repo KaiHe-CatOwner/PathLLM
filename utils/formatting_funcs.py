@@ -66,7 +66,7 @@ def wsi_formatting_qa_open(examples, tokenizer):
     examples["text_input"] = question
     return examples
 
-def wsi_formatting_qa_close(examples, tokenizer, prompt_tag=True):
+def wsi_formatting_qa_close(examples, tokenizer, prompt_tag=False):
     question = examples["question"]
     answer = examples["answer"]
     if answer.lower() in ['yes', 'no']:

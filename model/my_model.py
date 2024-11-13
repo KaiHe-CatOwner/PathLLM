@@ -383,7 +383,7 @@ class WPathVLM(PPathVLM):
     def __init__(self, llm_requires_grad, load_in_8bit, load_in_4bit, llm_name, 
                  trust_remote_code, token, tokenizer, image_token_id,
                  n_heads='32,16,8', n_level=3, embed_dim=512, 
-                 agg_strategy='abmil', hierachical_token=True,
+                 agg_strategy='abmil', hierachical_token=True, hierachical_adaptor=True,
                  data_cache_dir = '~/.cache'):
         
         nn.Module.__init__(self)
@@ -398,6 +398,15 @@ class WPathVLM(PPathVLM):
         self.n_level = n_level
         self.agg_strategy = agg_strategy
         self.embed_dim = embed_dim
+        self.config = self.llm.config
+        self.image_token_id = image_token_id # ['<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
+        self.hierachical_token = hierachical_token
+        self.hierachical_adaptor = hierachical_adaptor
+
+        if self.hierachical_adaptor:
+            self.adaptor_level = n_level
+        else:
+            self.adaptor_level = 1
 
         if self.agg_strategy == 'abmil':
             size = [embed_dim, int(embed_dim/2)]
@@ -412,12 +421,12 @@ class WPathVLM(PPathVLM):
             self.query = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)]
             self.longnet_encoder_list = nn.ModuleList([
                 slide_encoder.create_model(pretrained="", model_arch="gigapath_slide_enc2l512d", in_chans=self.llm.config.hidden_size)
-                for _ in range(self.n_level)]).to(torch.bfloat16)
+                for _ in range(self.adaptor_level)]).to(torch.bfloat16)
 
         # CrossAttention
         if self.agg_strategy == "qformer":
             self.query = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)]
-            self.qformer_encoder_list = nn.ModuleList([AttentionLayer(self.llm.config.hidden_size, embed_dim) for _ in range(self.n_level)]).to(torch.bfloat16)
+            self.qformer_encoder_list = nn.ModuleList([AttentionLayer(self.llm.config.hidden_size, embed_dim) for _ in range(self.adaptor_level)]).to(torch.bfloat16)
 
         if self.agg_strategy in ["qformer", "longnet"]:
             for tensor in self.query:
@@ -429,16 +438,17 @@ class WPathVLM(PPathVLM):
                                             nn.ReLU(),
                                             nn.Dropout(0.25),
                                         )
-        
-        self.config = self.llm.config
-        self.image_token_id = image_token_id # ['<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
-        self.hierachical_token = hierachical_token
 
         # Control whether the LLM parameters are trainable
         for param in self.llm.parameters():
             param.requires_grad = llm_requires_grad
 
     def get_wsi_embedding(self, patch_embs, patch_masks, coords, level, input_ids_instruct=None, attention_mask_instruct=None):
+
+        if self.hierachical_adaptor:
+            adaptor_level = level
+        else:
+            adaptor_level = 0
 
         # input_ids_instruct, attention_mask_instruct for text interaction
 
@@ -467,14 +477,14 @@ class WPathVLM(PPathVLM):
                                                                 instruct_embs, coords.to(torch.bfloat16),
                                                                 self_attention_mask=attention_mask_instruct,
                                                                 key_padding_mask=~key_padding_mask,
-                                                                slide_encoder_model=self.longnet_encoder_list[level],
+                                                                slide_encoder_model=self.longnet_encoder_list[adaptor_level],
                                                                 patch_size=patch_size_dict[level].cuda().to(torch.bfloat16)) # .to(torch.bfloat16)
 
         elif self.agg_strategy == "qformer":
             query = self.query[level].repeat(patch_embs.shape[0], 1, 1)
             key_padding_mask = patch_masks.bool()
             instruct_embs = self.embedding_layer(input_ids_instruct)
-            agged_WSI_embs = self.qformer_encoder_list[level](query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), instruct_embs,
+            agged_WSI_embs = self.qformer_encoder_list[adaptor_level](query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), instruct_embs,
                                                               self_attention_mask=attention_mask_instruct, 
                                                               key_padding_mask=~key_padding_mask)
         

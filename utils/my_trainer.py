@@ -365,6 +365,28 @@ class CustomTrainer(Trainer):
 
             return {"input_ids": outputs["input_ids"], "attention_mask": outputs["attention_mask"]}
 
+        def tokenize_instruct(element):
+            outputs = tokenizer(
+                # element[dataset_text_field] if not use_formatting_func else formatting_func(element),
+                element if not use_formatting_func else formatting_func(element),
+                add_special_tokens=add_special_tokens,
+                truncation=True,
+                padding=False,
+                max_length=max_seq_length,
+                return_overflowing_tokens=False,
+                return_length=False,
+            )
+
+            if use_formatting_func and not self._dataset_sanity_checked:
+                if not isinstance(formatting_func(element), list):
+                    raise ValueError(
+                        "The `formatting_func` should return a list of processed strings since it can lead to silent bugs."
+                    )
+                else:
+                    self._dataset_sanity_checked = True
+
+            return {"input_ids_instruct": outputs["input_ids"], "attention_mask_instruct": outputs["attention_mask"]}
+
         signature_columns = ["input_ids", "labels", "attention_mask"]
 
         extra_columns = list(set(dataset.column_names) - set(signature_columns))
@@ -382,7 +404,18 @@ class CustomTrainer(Trainer):
             num_proc=self.dataset_num_proc,
             batch_size=self.dataset_batch_size,
             input_columns=['text'],
-       ) 
+       )
+       ########## image text interaction ##########
+        if 'text_input' in dataset.column_names:
+            print('tokenize instruction text!')
+            tokenized_dataset = tokenized_dataset.map(
+                tokenize_instruct,
+                batched=False,
+                remove_columns=['text_input'],
+                num_proc=self.dataset_num_proc,
+                batch_size=self.dataset_batch_size,
+                input_columns=['text_input'],
+            )
         return tokenized_dataset
 
     def get_train_dataloader(self) -> DataLoader:
@@ -466,27 +499,6 @@ class CustomTrainer(Trainer):
             self._eval_dataloader = eval_dataloader
 
         return self.accelerator.prepare(eval_dataloader)
-
-    # @final
-    # def _save_checkpoint(self, model, trial, metrics=None):
-
-    #     # if isinstance(model, Blip2QformerPatch):
-    #     super(CustomTrainer, self)._save_checkpoint(model, trial, metrics)
-
-    #     from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
-    #     checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
-
-    #     run_dir = self._get_output_dir(trial=trial)
-    #     output_dir = os.path.join(run_dir, checkpoint_folder)
-
-    #     # Only save Adapter, filter out the vision encoder and llm
-    #     keys_to_match = ['vision_encoder', 'llm']
-
-    #     weight_to_save = get_mm_adapter_state_maybe_zero_3(self.model.named_parameters(), keys_to_match)
-
-    #     if self.args.local_rank == 0 or self.args.local_rank == -1:
-    #         # self.model.config.save_pretrained(output_dir)
-    #         torch.save(weight_to_save, os.path.join(output_dir, f'resampler.bin'))
 
     def compute_loss(self, model, inputs, return_outputs=False):
         if self.label_smoother is not None and "labels" in inputs:

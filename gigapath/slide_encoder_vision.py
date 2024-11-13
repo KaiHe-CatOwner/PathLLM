@@ -24,14 +24,13 @@ import numpy as np
 import timm
 from timm.models.registry import register_model
 import huggingface_hub
-from transformers import BertModel, BertConfig
 
 from .pos_embed import get_2d_sincos_pos_embed
 from .torchscale.model.LongNet import make_longnet_from_name
 
 
-class Reducer(nn.Module):
-    """Instruct Embedding"""
+class PatchEmbed(nn.Module):
+    """Slide Patch Embedding"""
 
     def __init__(
         self,
@@ -54,13 +53,13 @@ class Reducer(nn.Module):
 class CrossAttention(nn.Module):
     def __init__(self, embed_dim, num_heads):
         super(CrossAttention, self).__init__()
-        self.attn = nn.MultiheadAttention(embed_dim, num_heads, batch_first=True)
+        self.attn = nn.MultiheadAttention(embed_dim, num_heads,batch_first=True)
 
-    def forward(self, query, key, value, key_padding_mask=None):
+    def forward(self, query, key, value):
         # query: (batch_size, query_len, embed_dim)
         # key: (batch_size, key_len, embed_dim)
         # value: (batch_size, key_len, embed_dim)
-        output, attn_weights = self.attn(query, key, value, key_padding_mask=key_padding_mask)
+        output, attn_weights = self.attn(query, key, value)
         return output, attn_weights
 
 
@@ -71,7 +70,7 @@ class LongNetViT(nn.Module):
     Arguments:
     ----------
     in_chans: int
-        The number of input channels, should be the llm encoding dimension 4096.
+        The number of input channels, should be the tile encoding dimension 1536.
     embed_dim: int
         The embedding dimension of the LongNet model.
     depth: int
@@ -90,72 +89,64 @@ class LongNetViT(nn.Module):
         The dropout rate used in the model.
     drop_path_rate: float
         The drop path rate used in the model.
-    num_layers: int
-        The number of stacked "encoder and xatten"
     """
 
     def __init__(self, 
-                in_chans=4096, 
-                embed_dim=512, 
+                in_chans=1536, 
+                embed_dim=256, 
                 depth=12, 
                 slide_ngrids=1000, 
                 tile_size=256,
                 max_wsi_size=262144,
                 norm_layer=nn.LayerNorm, 
+                global_pool=False, 
                 dropout=0.25, 
-                drop_path_rate=0.1,
-                num_layers = 2,
-                num_heads = 8,
+                drop_path_rate=0.1, 
                 **kwargs):
         super().__init__()
 
         # --------------------------------------------------------------------------
-        print("####Vision-Text Interaction based Adaptors (Longnet) ####")
+        # MAE encoder specifics
+        print("####Vision based Adaptors (Longnet) ####")
+
+        self.patch_embed = PatchEmbed(in_chans, embed_dim)
 
         self.slide_ngrids = slide_ngrids
         num_patches = slide_ngrids**2
-
-        self.register_buffer('pos_embed', torch.zeros(1, num_patches, embed_dim), persistent=True)  # fixed sin-cos embedding
-        self.num_layers = num_layers
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.register_buffer('pos_embed', torch.zeros(1, num_patches + 1, embed_dim), persistent=True)  # fixed sin-cos embedding
 
         self.encoder_name = "LongNet_{}_layers_{}_dim".format(depth, embed_dim)
         if kwargs.get("mlp_ratio", 4.0) != 4.0:
             self.encoder_name += "_mlp{}".format(kwargs.get("mlp_ratio"))
         
-        config_self = BertConfig(
-            hidden_size=embed_dim,
-            num_attention_heads=num_heads,
-            num_hidden_layers=1  # 只使用一层 Bert
-        )
-        
         # get optimal segment length
         segment_length = self.get_optimal_segment_length(max_wsi_size, tile_size)
-
-        self.encoder_wsi = nn.ModuleList([make_longnet_from_name(self.encoder_name, drop_path_rate=drop_path_rate, dropout=dropout, segment_length=segment_length)
-                       for _ in range(num_layers)])
-
-        self.reduce = Reducer(in_chans, embed_dim)
-        self.self_attention = nn.ModuleList([BertModel(config_self) for _ in range(num_layers)])
-        self.cross_attention = nn.ModuleList([CrossAttention(embed_dim, num_heads) for _ in range(num_layers)])
-
+        self.encoder1 = make_longnet_from_name(self.encoder_name, drop_path_rate=drop_path_rate, dropout=dropout, segment_length=segment_length)
+        self.encoder2 = make_longnet_from_name(self.encoder_name, drop_path_rate=drop_path_rate, dropout=dropout, segment_length=segment_length)
+        self.cross_attn1 = CrossAttention(embed_dim,4)
+        self.cross_attn2 = CrossAttention(embed_dim,4)
         # self.encoder2 = make_longnet_from_name(self.encoder_name, drop_path_rate=drop_path_rate, dropout=dropout, segment_length=segment_length)
-        self.norm = nn.ModuleList([norm_layer(embed_dim) for _ in range(num_layers)])
+        self.norm = norm_layer(embed_dim)
         # --------------------------------------------------------------------------
+
+        self.global_pool = global_pool
+        print("Global Pooling:", self.global_pool)
 
         self.initialize_vit_weights()
 
     def initialize_vit_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], self.slide_ngrids, cls_token=False)
+        pos_embed = get_2d_sincos_pos_embed(self.pos_embed.shape[-1], self.slide_ngrids, cls_token=True)
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
-        # initialize reduce like nn.Linear (instead of nn.Conv2d)
-        w = self.reduce.proj.weight.data
+        # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
+        w = self.patch_embed.proj.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        # torch.nn.init.normal_(self.cls_token, std=0.02)
+        torch.nn.init.normal_(self.cls_token, std=0.02)
 
         # initialize nn.Linear and nn.LayerNorm
         self.apply(self._init_weights)
@@ -202,50 +193,47 @@ class LongNetViT(nn.Module):
         """
         coords_ = torch.floor(coords / patch_size)
         pos = coords_[..., 0] * self.slide_ngrids + coords_[..., 1]
-        return pos.long() # + 1  # add 1 for the cls token
+        return pos.long() + 1  # add 1 for the cls token
 
-    def forward(self, querys , contexts, instructs, coords, patch_size=256.0, self_attention_mask=None, key_padding_mask=None):
+    def forward(self, querys ,x, coords, patch_size=256.0, all_layer_embed=False):
         """
         The forward pass of the model
 
         Arguments:
         ----------
-        contexts: torch.Tensor
+        x: torch.Tensor
             The input tile embeddings, of shape [N, L, D]
         coords: torch.Tensor
             The coordinates of the patches, of shape [N, L, 2]
+        all_layer_embed: bool
+            Whether to return embeddings from all layers or not
         """
-
-        query_length = querys.shape[1]
-        # mask for self attn
-        if self_attention_mask is not None:
-            # instruct_tensor requires a mask of the same size filled with ones
-            query_mask_extension = torch.ones((querys.shape[0], querys.shape[1]), dtype=self_attention_mask.dtype, device=self_attention_mask.device)
-            self_attention_mask = torch.cat((query_mask_extension, self_attention_mask), dim=-1)
-
         # embed patches
+        x = self.patch_embed(x)
+        x = x.to(torch.bfloat16)
         # get pos indices
         pos = self.coords_to_pos(coords=coords, patch_size=patch_size)  # [N, L]
-        contexts = contexts + self.pos_embed[:, pos, :].squeeze(0)
-        # embed instruct, 4096 -> 512
-        instructs = self.reduce(instructs)
-
-        for i in range(self.num_layers):
-            # longnet for wsi tokens
-            contexts = self.encoder_wsi[i](src_tokens=None, token_embeddings=contexts, encoder_padding_mask=key_padding_mask)["encoder_out"] # [:,1:,:]
-            # self-attention for querys and instructs interaction
-            combined_querys = torch.cat((querys, instructs), dim=1)
-            self_attn_output = self.self_attention[i](
-                inputs_embeds=combined_querys,
-                attention_mask=self_attention_mask
-            ).last_hidden_state
-            querys = self_attn_output[:, :query_length, :] # keep query vector only
-            # norm querys
-            querys = self.norm[i](querys)
-            # Cross-Attention: key_padding_mask for padded patch tokens
-            querys, _ = self.cross_attention[i](query=querys, key=contexts, value=contexts, key_padding_mask=key_padding_mask)
-
-        return querys.to(torch.bfloat16)
+        x = x + self.pos_embed[:, pos, :].squeeze(0)
+        x = x.to(torch.bfloat16)
+        # append cls token, maybe to be deleted
+        #
+        #
+        cls_token = self.cls_token + self.pos_embed[:, :1, :]
+        cls_tokens = cls_token.expand(x.shape[0], -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        # apply Transformer blocks
+        if all_layer_embed:
+            x_list = self.encoder(src_tokens=None, token_embeddings=x, return_all_hiddens=all_layer_embed)["encoder_states"]
+        else:
+            # x_list = [self.encoder(src_tokens=None, token_embeddings=x)["encoder_out"]]
+            x_list = self.encoder1(src_tokens=None, token_embeddings=x)["encoder_out"][:,1:,:]
+            querys = self.cross_attn1(querys,x_list,x_list)[0]
+            # x_list = x_list.detach()
+            x_list_2 = self.encoder2(src_tokens=None, token_embeddings=x_list)["encoder_out"]
+            x_list_2 = self.cross_attn2(querys,x_list_2,x_list_2)[0]
+            x_list_2 = self.norm(x_list_2)
+            torch.cuda.empty_cache()
+            return x_list_2.to(torch.bfloat16)
             
 
         # outcomes = []
@@ -292,8 +280,7 @@ def create_model(pretrained: str, model_arch: str, in_chans: int, local_dir: str
 
     return model
 
-
 @register_model
-def gigapath_slide_enc2l512d(**kwargs):
+def gigapath_slide_enc2l512d_vision(**kwargs):
     model = LongNetViT(embed_dim=512, depth=2, mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs).to(torch.bfloat16)
     return model

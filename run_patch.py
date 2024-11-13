@@ -14,6 +14,7 @@ from model.my_model import PPathVLM
 from peft import LoraConfig
 from datasets import load_dataset, concatenate_datasets, load_from_disk, logging
 from utils.data_collator import MyDataCollatorForPPathVLM
+from utils.formatting_funcs import patch_formatting_itp, patch_formatting_ytb
 
 @dataclass
 class ScriptArguments:
@@ -85,32 +86,13 @@ device = 'cuda'
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
-tokenizer.truncation_side = 'left'
+tokenizer.truncation_side = 'right'
 
-new_tokens = ['<Question>',  '<Answer>', '<Image>']
-num_added_toks = tokenizer.add_tokens(new_tokens)
+new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+# num_added_toks = tokenizer.add_tokens(new_tokens)
+num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
-
-questions = pd.read_csv('./utils/question_list.csv', header=None)  
-questions = questions[0].tolist()
-
-def formatting_func_itp(examples):
-    question = random.choice(questions)
-    answer = examples["txt"]
-    text = f"<Question> {question}{tokenizer.eos_token} " + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-def formatting_func_ytb(examples):
-    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
-    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
-    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
-    text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
 
 if script_args.select_data_num>0:
     split_text = "train[:{}]".format(script_args.select_data_num)
@@ -125,7 +107,7 @@ if script_args.dataset_name_list != None:
     for dataset_name in script_args.dataset_name_list.split(","):
         one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
         one_dataset = one_dataset.rename_column('jpg', 'image')
-        one_dataset = one_dataset.map(formatting_func_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
+        one_dataset = one_dataset.map(patch_formatting_itp, num_proc=4, remove_columns=['txt','__key__', '__url__'])
 
         one_dataset = one_dataset.train_test_split(test_size=0.01)
         train_dataset.append(one_dataset['train'])
@@ -134,7 +116,7 @@ if script_args.dataset_name_list != None:
 if script_args.dataset_local_paths != None:
     for dataset_name in script_args.dataset_local_paths.split(","):
         one_dataset = load_from_disk(dataset_name)
-        one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
+        one_dataset = one_dataset.map(patch_formatting_ytb, num_proc=4, remove_columns=['id','conversations'])
         train_dataset.append(one_dataset)
 
 train_dataset = concatenate_datasets(train_dataset)

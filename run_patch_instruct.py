@@ -14,6 +14,7 @@ from model.my_model import PPathVLM
 from peft import LoraConfig, get_peft_model
 from datasets import load_dataset, concatenate_datasets
 from utils.data_collator import MyDataCollatorForPPathVLM
+from utils.formatting_funcs import patch_formatting_vqap, patch_formatting_vmc, patch_formatting_ytb
 device = "cuda"
 
 @dataclass
@@ -86,50 +87,13 @@ device = 'cuda'
 tokenizer = AutoTokenizer.from_pretrained(script_args.llm_name)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
-tokenizer.truncation_side = 'left'
+tokenizer.truncation_side = 'right'
 
-new_tokens = ['<Question>',  '<Answer>', '<Image>']
-num_added_toks = tokenizer.add_tokens(new_tokens)
+new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+# num_added_toks = tokenizer.add_tokens(new_tokens)
+num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
-
-questions = pd.read_csv('./utils/question_list.csv', header=None)  
-questions = questions[0].tolist()
-
-def formatting_func_vqap(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    question = question.replace("<image>\n", "")
-    question = question.replace("<image>", "")
-    text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-# CNX-PathLLM/MultiConversation
-# [{'from': 'human', 'value': 'What are the key features of this image that suggest chronic pancreatitis?'},
-# {'from': 'gpt', 'value': 'The presence of duct dilatation, fibrosis, and pancreatic tissue necrosis are indicative of chronic pancreatitis.}]
-def formatting_func_vmc(examples): # image conversations
-    conversation = examples["conversations"]
-    conversation = ast.literal_eval(conversation)
-    text = ""
-    for sentence in conversation:
-        sentence['value'] = sentence['value'].replace("<image>\n", "")
-        sentence['value'] = sentence['value'].replace("<image>", "")
-        if sentence['from'] == 'human':
-            text += f"<Question> {sentence['value']}{tokenizer.eos_token}"
-        elif sentence['from'] == 'gpt':
-            text += f"<Answer> {sentence['value']}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
-
-def formatting_func_ytb(examples):
-    text = examples['conversations'].replace("<image>\n", "").replace("<image>", "")
-    question = ast.literal_eval(text[1:-1].split('\n')[0])['value'].replace("\n", "")
-    answer = ast.literal_eval(text[1:-1].split('\n')[1])['value'].replace("\n", "")
-    text = f"<Question> {question}{tokenizer.eos_token}" + f"<Answer> {answer}{tokenizer.eos_token}\n"
-    # text = f"<DES> {answer}{tokenizer.eos_token}\n"
-    examples["text"] = text
-    return examples
 
 if script_args.select_data_num>0:
     split_text = "train[:{}]".format(script_args.select_data_num)
@@ -143,11 +107,11 @@ eval_dataset = []
 for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     if dataset_name in ["CNX-PathLLM/Pathinstruct", "CNX-PathLLM/TextbookQAPair"]:
-        one_dataset = one_dataset.map(formatting_func_vqap, num_proc=4, remove_columns=["question", "answer"])
+        one_dataset = one_dataset.map(patch_formatting_vqap, num_proc=4, remove_columns=["question", "answer"])
     elif dataset_name in ["CNX-PathLLM/MultiConversation"]:
-        one_dataset = one_dataset.map(formatting_func_vmc, num_proc=4, remove_columns=["conversations"])
+        one_dataset = one_dataset.map(patch_formatting_vmc, num_proc=4, remove_columns=["conversations"])
     elif dataset_name in ["CNX-PathLLM/YoutubeInstruct"]:
-        one_dataset = one_dataset.map(formatting_func_ytb, num_proc=4, remove_columns=['id','conversations'])
+        one_dataset = one_dataset.map(patch_formatting_ytb, num_proc=4, remove_columns=['id','conversations'])
     train_dataset.append(one_dataset)
 
 train_dataset = concatenate_datasets(train_dataset)

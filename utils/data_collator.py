@@ -424,6 +424,7 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         cor_list = []
         patch_mask_list = []
         exa_list = []
+        instructs = []
 
         if self.test:
             ans_list = []
@@ -468,6 +469,19 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
             cor_list.append(cor)
             patch_mask_list.append(patch_mask)
 
+        # for instruct ids and mask padding
+        if "input_ids_instruct" in examples[0].keys():
+            for d in examples:
+                instruct = {}
+                instruct["input_ids"] = d["input_ids_instruct"]
+                instruct["attention_mask"] = d["attention_mask_instruct"]
+                instructs.append(instruct)
+                del d["input_ids_instruct"],d["attention_mask_instruct"]
+        
+            instruct_batch = pad_without_fast_tokenizer_warning(
+                self.tokenizer, instructs, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+            )
+
         if isinstance(examples[0], Mapping):
             batch = pad_without_fast_tokenizer_warning(
                 self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
@@ -479,6 +493,9 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
 
         # If special token mask has been preprocessed, pop it from the dict.
         labels = batch["input_ids"].clone()
+
+        # print(batch["input_ids"])
+        # print(batch["attention_mask"])
 
         # print("####pre:")
         # print(labels)
@@ -509,6 +526,10 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         # print(labels)
         
         batch["labels"] = labels
+        if instructs:
+            batch["input_ids_instruct"] = instruct_batch["input_ids"][:,1:]
+            batch["attention_mask_instruct"] = instruct_batch["attention_mask"][:,1:]
+
         if self.test:
             batch["answers"] = ans_list
             batch["questions"] = qes_list

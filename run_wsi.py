@@ -5,15 +5,18 @@ import ast
 import random
 import torch
 import pandas as pd
+from functools import partial
 from transformers import TrainingArguments, AutoTokenizer, HfArgumentParser
 from utils.my_trainer import CustomTrainer
 from utils.utils import my_compute_metrics,seed_everything
 from typing import Optional
 from dataclasses import dataclass, field
-from model.my_model import PPathVLM, WPathVLM
+from model.my_model import WPathVLM
+from model.my_model_vision import WPathVLM as WPathVLM_Vision
 from peft import LoraConfig, get_peft_model
 from datasets import load_dataset, concatenate_datasets, load_from_disk
 from utils.data_collator import MyDataCollatorForWPathVLM
+from utils.formatting_funcs import wsi_formatting_des, wsi_formatting_qa_open, wsi_formatting_qa_close
 
 @dataclass
 class ScriptArguments:
@@ -31,6 +34,8 @@ class ScriptArguments:
 
     # model
     llm_name: Optional[str] = field(default="meta-llama/Meta-Llama-3.1-8B", metadata={"help": "the model name, mistralai/Mistral-7B-Instruct-v0.2, meta-llama/Meta-Llama-3-8B"})
+    vision_adaptor: Optional[bool] = field(default=False, metadata={"help": "True or  False (with interaction with text), using for longnet and qformer."})
+    hierachical_token: Optional[bool] = field(default=True, metadata={"help": "True or  False"})
     
     # data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data, -1 mean use all data"})
@@ -73,7 +78,6 @@ class ScriptArguments:
 
     # unused
     push_to_hub: Optional[bool] = field(default=False, metadata={"help": "Push the model to HF Hub"})
-    hub_model_id: Optional[str] = field(default="mistral-7b-finetuned-ultrachat", metadata={"help": "The name of the model on HF Hub"})
     use_peft: Optional[bool] = field(default=False, metadata={"help": "Wether to use PEFT or not to train adapters"})
     peft_lora_r: Optional[int] = field(default=64, metadata={"help": "the r parameter of the LoRA adapters"})
     peft_lora_alpha: Optional[int] = field(default=16, metadata={"help": "the alpha parameter of the LoRA adapters"})
@@ -95,41 +99,11 @@ tokenizer.pad_token = "<|finetune_right_pad_id|>"
 tokenizer.padding_side = 'right'
 tokenizer.truncation_side = 'right'
 
-new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 # num_added_toks = tokenizer.add_tokens(new_tokens)
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
 print("new_tokens_ids: ", new_tokens_ids)
-
-questions = pd.read_csv('./utils/question_wsi_list.csv', header=None)  
-questions = questions[0].tolist()
-
-def formatting_func_des(examples):
-    question = random.choice(questions)
-    answer = examples["description"]
-    text = f"<|Question|>{question}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
-    examples["text"] = text
-    return examples
-
-def formatting_func_qa_open(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    text = f"<|Question|>{question}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
-    examples["text"] = text
-    return examples
-
-def formatting_func_qa_close(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    if answer.lower() in ['yes', 'no']:
-        prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
-    else:
-        prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
-    
-    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
-    text = f"<|Question|>{question}" + f"<|Answer|>{answer}{tokenizer.eos_token}"
-    examples["text"] = text
-    return examples
 
 if script_args.select_data_num>0:
     split_text = "train[:{}]".format(script_args.select_data_num)
@@ -150,12 +124,15 @@ for dataset_name in script_args.dataset_name_list.split(","):
     if 'QA' in dataset_name:  # for QA instruction dataset
         columns_to_remove += ['question', 'answer']
         if 'Open' in dataset_name: # for OpenQA instruction dataset
-            one_dataset = one_dataset.map(formatting_func_qa_open, num_proc=20, remove_columns=columns_to_remove)
+            one_dataset = one_dataset.map(wsi_formatting_qa_open, fn_kwargs={'tokenizer': tokenizer},
+                                        num_proc=20, remove_columns=columns_to_remove)
         else: # for CloseQA instruction dataset
-            one_dataset = one_dataset.map(formatting_func_qa_close, num_proc=20, remove_columns=columns_to_remove)
+            one_dataset = one_dataset.map(wsi_formatting_qa_close, fn_kwargs={'tokenizer': tokenizer},
+                                        num_proc=20, remove_columns=columns_to_remove)
     else:
         columns_to_remove += ['description']
-        one_dataset = one_dataset.map(formatting_func_des, num_proc=20, remove_columns=columns_to_remove)
+        one_dataset = one_dataset.map(wsi_formatting_des, fn_kwargs={'tokenizer': tokenizer}, 
+                                    num_proc=20, remove_columns=columns_to_remove)
     dataset.append(one_dataset)
 
 dataset = concatenate_datasets(dataset)
@@ -183,20 +160,38 @@ eval_dataset = None
 print(train_dataset)
 print(eval_dataset)
 
-model = WPathVLM(script_args.llm_requires_grad, 
-                script_args.load_in_8bit, 
-                script_args.load_in_4bit, 
-                script_args.llm_name, 
-                script_args.trust_remote_code, # False
-                script_args.token, # True
-                tokenizer,
-                new_tokens_ids[-1],
-                n_heads = script_args.n_heads, 
-                n_level = script_args.n_level, 
-                embed_dim = script_args.embed_dim,
-                agg_strategy = script_args.agg_strategy,
-                data_cache_dir = script_args.data_cache_dir,
-                )
+if script_args.vision_adaptor:
+    model = WPathVLM_Vision(script_args.llm_requires_grad, 
+                            script_args.load_in_8bit, 
+                            script_args.load_in_4bit, 
+                            script_args.llm_name, 
+                            script_args.trust_remote_code, # False
+                            script_args.token, # True
+                            tokenizer,
+                            image_token_id = new_tokens_ids[3:],
+                            n_heads = script_args.n_heads, 
+                            n_level = script_args.n_level, 
+                            embed_dim = script_args.embed_dim,
+                            agg_strategy = script_args.agg_strategy,
+                            hierachical_token = script_args.hierachical_token,
+                            data_cache_dir = script_args.data_cache_dir,
+                            )
+else:
+    model = WPathVLM(script_args.llm_requires_grad, 
+                    script_args.load_in_8bit, 
+                    script_args.load_in_4bit, 
+                    script_args.llm_name, 
+                    script_args.trust_remote_code, # False
+                    script_args.token, # True
+                    tokenizer,
+                    image_token_id = new_tokens_ids[3:],
+                    n_heads = script_args.n_heads, 
+                    n_level = script_args.n_level, 
+                    embed_dim = script_args.embed_dim,
+                    agg_strategy = script_args.agg_strategy,
+                    hierachical_token = script_args.hierachical_token,
+                    data_cache_dir = script_args.data_cache_dir,
+                    )
 
 model.print_parameter_counts()
 model.print_llm_parameters()

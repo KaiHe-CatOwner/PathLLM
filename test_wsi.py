@@ -16,14 +16,13 @@ from dataclasses import dataclass, field
 from utils.data_collator import MyDataCollatorForWPathVLM
 from datasets import load_dataset, concatenate_datasets, load_from_disk
 from model.my_model import WPathVLM
+from model.my_model_vision import WPathVLM as WPathVLM_Vision
 from peft import LoraConfig, get_peft_model
+from utils.formatting_funcs import wsi_formatting_des_test, wsi_formatting_qa_open_test, wsi_formatting_qa_close_test
 
 from utils.eval_utils import calculate_prf_score, compute_bleu_scores, split_sentence, compute_cider_scores, compute_spice_scores
 
 device = 'cuda'
-
-questions = pd.read_csv('./utils/question_wsi_list.csv', header=None)  
-questions = questions[0].tolist()
 
 @dataclass
 class ScriptArguments:
@@ -41,6 +40,8 @@ class ScriptArguments:
     llm_name: Optional[str] = field(default="meta-llama/Meta-Llama-3-8B", metadata={"help": "The model name"})
     max_seq_length: Optional[int] = field(default=512, metadata={"help": "Input sequence length"})
     llm_requires_grad: Optional[bool] = field(default=False, metadata={"help": "True or  /output/checkpoint-1400"})
+    vision_adaptor: Optional[bool] = field(default=False, metadata={"help": "True or  False"})
+    hierachical_token: Optional[bool] = field(default=True, metadata={"help": "True or  False"})
     
     # Data
     select_data_num: Optional[int] = field(default=-1, metadata={"help": "the number of training data， -1 mean use all data"})
@@ -69,37 +70,6 @@ class ScriptArguments:
     peft_lora_r: Optional[int] = field(default=64, metadata={"help": "the r parameter of the LoRA adapters, 4 to 64"})
     peft_lora_alpha: Optional[int] = field(default=16, metadata={"help": "the alpha parameter of the LoRA adapters, 16 to 128"})
 
-def formatting_func_des(examples):
-    question = random.choice(questions)
-    answer = examples["description"]
-    text = f"<|Question|>{question} " + f"<|Answer|>"
-    examples["text"] = text
-    examples["answer"] = answer
-    examples["question"] = question
-    return examples
-
-def formatting_func_qa_open(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    text = f"<|Question|>{question} " + f"<|Answer|>"
-    examples["text"] = text
-    examples["answer"] = answer
-    return examples
-
-def formatting_func_qa_close(examples):
-    question = examples["question"]
-    answer = examples["answer"]
-    if answer.lower() in ['yes', 'no']:
-        prompt = f" Please provide only the answer (either Yes or No) for the following statement. Do not include any explanations or additional text. Just give Yes or No."
-    else:
-        prompt = f" Please provide only the answer (for example, A. [Answer Text], B. [Answer Text], etc.) for the following question. Do not include any explanations or additional text. Just give the letter followed by the corresponding answer."
-
-    text = f"<|Question|>{question}" + f"<|Answer|>"
-    # text = f"<|Question|>{question}<|Prompt|>{prompt}" + f"<|Answer|>"
-    examples["text"] = text
-    examples["answer"] = answer
-    return examples
-
 def tokenize(element):
     """Tokenize the input text."""
     outputs = tokenizer(
@@ -123,7 +93,7 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         device: The device (CPU or GPU) on which to perform computations.
         script_args: Arguments containing settings for evaluation, e.g., eval_sample_size and results_save_path.
     """
-    qes_list, ans_list, res_list = [], [], []
+    slide_id_list, qes_list, ans_list, res_list = [], [], [], []
     
     total_batches = len(eval_dataloader)
     N = script_args.eval_sample_size if script_args.eval_sample_size != -1 else total_batches
@@ -153,13 +123,14 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         )
 
         # Collect results
+        slide_id_list.extend(slide_ids)
         qes_list.extend(questions)
         ans_list.extend(answers)
         res_list.extend(res)
 
     # Save results in a dictionary
     results = {
-        "slide_ids": slide_ids,
+        "slide_ids": slide_id_list,
         "questions": qes_list,
         "answers": ans_list,
         "results": res_list,
@@ -277,6 +248,7 @@ tokenizer.truncation_side = 'left'
 
 # Add new tokens
 new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+# new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
 # num_added_toks = tokenizer.add_tokens(new_tokens)
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
@@ -301,14 +273,17 @@ for dataset_name in script_args.dataset_name_list.split(","):
     if 'QA' in dataset_name:  # for QA instruction dataset
         # columns_to_remove += ['question']
         if 'Open' in dataset_name: # for OpenQA instruction dataset
-            one_dataset = one_dataset.map(formatting_func_qa_open, num_proc=20, remove_columns=columns_to_remove)
+            one_dataset = one_dataset.map(wsi_formatting_qa_open_test, fn_kwargs={'tokenizer': tokenizer},
+                                        num_proc=20, remove_columns=columns_to_remove)
             open_dataset.append(one_dataset)
         else: # for CloseQA instruction dataset
-            one_dataset = one_dataset.map(formatting_func_qa_close, num_proc=20, remove_columns=columns_to_remove)
+            one_dataset = one_dataset.map(wsi_formatting_qa_close_test, fn_kwargs={'tokenizer': tokenizer, 'prompt_tag': True}, 
+                                        num_proc=20, remove_columns=columns_to_remove)
             close_dataset.append(one_dataset)
     else:
         columns_to_remove += ['description']
-        one_dataset = one_dataset.map(formatting_func_des, num_proc=20, remove_columns=columns_to_remove)
+        one_dataset = one_dataset.map(wsi_formatting_des_test, fn_kwargs={'tokenizer': tokenizer}, 
+                                    num_proc=20, remove_columns=columns_to_remove)
         open_dataset.append(one_dataset)
 
 if open_dataset!=[]:
@@ -321,20 +296,38 @@ if close_dataset!=[]:
 print(open_dataset)
 print(close_dataset)
 
-model = WPathVLM(script_args.llm_requires_grad, 
-                script_args.load_in_8bit, 
-                script_args.load_in_4bit, 
-                script_args.llm_name, 
-                script_args.trust_remote_code, # False
-                script_args.token, # True
-                tokenizer,
-                new_tokens_ids[-1],
-                n_heads = script_args.n_heads, 
-                n_level = script_args.n_level, 
-                embed_dim = script_args.embed_dim,
-                agg_strategy = script_args.agg_strategy,
-                data_cache_dir = script_args.data_cache_dir,
-                )
+if script_args.vision_adaptor:
+    model = WPathVLM_Vision(script_args.llm_requires_grad, 
+                            script_args.load_in_8bit, 
+                            script_args.load_in_4bit, 
+                            script_args.llm_name, 
+                            script_args.trust_remote_code, # False
+                            script_args.token, # True
+                            tokenizer,
+                            new_tokens_ids[3:],
+                            n_heads = script_args.n_heads, 
+                            n_level = script_args.n_level, 
+                            embed_dim = script_args.embed_dim,
+                            agg_strategy = script_args.agg_strategy,
+                            hierachical_token = script_args.hierachical_token,
+                            data_cache_dir = script_args.data_cache_dir,
+                            )
+else:
+    model = WPathVLM(script_args.llm_requires_grad, 
+                    script_args.load_in_8bit, 
+                    script_args.load_in_4bit, 
+                    script_args.llm_name, 
+                    script_args.trust_remote_code, # False
+                    script_args.token, # True
+                    tokenizer,
+                    new_tokens_ids[3:],
+                    n_heads = script_args.n_heads, 
+                    n_level = script_args.n_level, 
+                    embed_dim = script_args.embed_dim,
+                    agg_strategy = script_args.agg_strategy,
+                    hierachical_token = script_args.hierachical_token,
+                    data_cache_dir = script_args.data_cache_dir,
+                    )
 
 if script_args.use_peft:
     peft_config = LoraConfig(

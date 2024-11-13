@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import open_clip
-import gigapath.slide_encoder as slide_encoder
+import gigapath.slide_encoder_vision as slide_encoder
 # from gigapath.pipeline import run_inference_with_slide_encoder
 from torchvision import transforms
 import timm
@@ -40,12 +40,10 @@ class Attn_Net_Gated(nn.Module):
         return A
     
 class AttentionLayer(nn.Module):
-    def __init__(self, llm_dim, embed_dim, num_layers=2, num_heads=16):
+    def __init__(self, embed_dim, num_heads=16):
         super(AttentionLayer, self).__init__()
 
-        print("#####Vision-Text Interation Qformer######")
-
-        self.num_layers = num_layers
+        print("#####Vision only Interation Qformer######")
         
         # 使用 BertModel 创建 self-attention 层
         config = BertConfig(
@@ -53,51 +51,31 @@ class AttentionLayer(nn.Module):
             num_attention_heads=num_heads,
             num_hidden_layers=1  # 只使用一层 Bert
         )
-        # text embeds dimensional reduce
-        self.reduce = nn.Sequential(
-            nn.Linear(llm_dim, embed_dim),  # reduction to embed_dim
-            nn.ReLU()                   # Activation function
-        )
-
-        self.self_attention = nn.ModuleList([BertModel(config) for _ in range(num_layers)])
-        self.cross_attention = nn.ModuleList([nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads, batch_first=True) for _ in range(num_layers)])
+        self.self_attention = BertModel(config).to(torch.bfloat16)
+        # 创建 cross-attention 层
+        self.cross_attention = nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads, batch_first=True).to(torch.bfloat16)
     
-    def forward(self, input_tensor, context_tensor, instruct_tensor, self_attention_mask=None, key_padding_mask=None):
+    def forward(self, input_tensor, context_tensor, query_length, self_attention_mask=None, key_padding_mask=None):
         """
-        input_tensor: Input feature tensor for self-attention processing
-        context_tensor: Context feature tensor for cross-attention processing
-        instruct_tensor: Instruction tensor to be concatenated with input_tensor for self-attention
-        query_length: Length of the query to retain for cross-attention
-        self_attention_mask: Self-attention mask (1 indicates valid position, 0 indicates padding)
-        key_padding_mask: Cross-attention key padding mask (True -> no attention)
+        input_tensor: 输入的特征张量，用于 self-attention 处理
+        context_tensor: 上下文特征张量，用于 cross-attention 处理
+        query_length: 用于保留 query 部分
+        self_attention_mask: 自注意力掩码 (1 表示有效位置，0 表示填充位置)
+        key_padding_mask: 交叉注意力掩码 True -> no attention 
         """
-        query_length = input_tensor.shape[1]
-        instruct_tensor = self.reduce(instruct_tensor)
 
-        if self_attention_mask is not None:
-            # instruct_tensor requires a mask of the same size filled with ones
-            input_mask_extension = torch.ones((input_tensor.shape[0], input_tensor.shape[1]), dtype=self_attention_mask.dtype, device=self_attention_mask.device)
-            self_attention_mask = torch.cat((input_mask_extension, self_attention_mask), dim=-1)
+        self_attn_output = self.self_attention(
+            inputs_embeds=input_tensor.to(torch.bfloat16),
+            attention_mask=self_attention_mask
+        ).last_hidden_state
+        # Cross-Attention
+        query = self_attn_output[:, :query_length, :] # keep query vector only
+        key_value = context_tensor.to(torch.bfloat16)
 
-        for i in range(self.num_layers):
-            combined_tensor = torch.cat((input_tensor, instruct_tensor), dim=1)
-            self_attn_output = self.self_attention[i](
-                inputs_embeds=combined_tensor,
-                attention_mask=self_attention_mask
-            ).last_hidden_state
-            query = self_attn_output[:, :query_length, :] # keep query vector only
-            # Cross-Attention
-            input_tensor, _ = self.cross_attention[i](query=query, key=context_tensor, value=context_tensor, key_padding_mask=key_padding_mask)
-
-        # combined_tensor = torch.cat((cross_attn_output, instruct_tensor), dim=1)
-        # self_attn_output = self.self_attention1(
-        #     inputs_embeds=combined_tensor,
-        #     attention_mask=self_attention_mask
-        # ).last_hidden_state
-        # query = self_attn_output[:, :query_length, :] # keep query vector only
-        # cross_attn_output, _ = self.cross_attention1(query=query, key=context_tensor, value=context_tensor, key_padding_mask=key_padding_mask)
+        # 计算 cross-attention
+        cross_attn_output, _ = self.cross_attention(query=query, key=key_value, value=key_value, key_padding_mask=key_padding_mask)
         
-        return input_tensor
+        return cross_attn_output
 
 class PPathVLM(nn.Module):
     def __init__(self, llm_requires_grad, clip_name, load_in_8bit, load_in_4bit, llm_name, 
@@ -399,8 +377,9 @@ class WPathVLM(PPathVLM):
         self.agg_strategy = agg_strategy
         self.embed_dim = embed_dim
 
+        size = [self.embed_dim, int(self.embed_dim/2)]
+
         if self.agg_strategy == 'abmil':
-            size = [embed_dim, int(embed_dim/2)]
         # attention could be splitted as level based
             self.att_net = nn.ModuleList([
                 Attn_Net_Gated(L=size[0], D=size[1], dropout=True, heads=self.n_heads[i]) 
@@ -411,36 +390,31 @@ class WPathVLM(PPathVLM):
         if self.agg_strategy == "longnet":
             self.query = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)]
             self.longnet_encoder_list = nn.ModuleList([
-                slide_encoder.create_model(pretrained="", model_arch="gigapath_slide_enc2l512d", in_chans=self.llm.config.hidden_size)
-                for _ in range(self.n_level)]).to(torch.bfloat16)
-
-        # CrossAttention
+                slide_encoder.create_model(pretrained="", model_arch="gigapath_slide_enc2l512d_vision", in_chans=embed_dim, global_pool=False)
+                for _ in range(self.n_level)
+                ])
+            
         if self.agg_strategy == "qformer":
             self.query = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)]
-            self.qformer_encoder_list = nn.ModuleList([AttentionLayer(self.llm.config.hidden_size, embed_dim) for _ in range(self.n_level)]).to(torch.bfloat16)
-
-        if self.agg_strategy in ["qformer", "longnet"]:
-            for tensor in self.query:
-                nn.init.xavier_uniform_(tensor)
+            self.qformer_encoder_list = nn.ModuleList([AttentionLayer(embed_dim) for _ in range(self.n_level)])
 
         self.resampler_layer = nn.Sequential(
-                                            nn.LayerNorm(self.embed_dim),
-                                            nn.Linear(self.embed_dim, self.llm.config.hidden_size, bias=False),
-                                            nn.ReLU(),
-                                            nn.Dropout(0.25),
-                                        )
+            nn.LayerNorm(self.embed_dim),
+            nn.Linear(self.embed_dim, self.llm.config.hidden_size, bias=False),
+            nn.ReLU(),
+            nn.Dropout(0.25),
+            )
         
         self.config = self.llm.config
-        self.image_token_id = image_token_id # ['<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
+        self.image_token_id = image_token_id
         self.hierachical_token = hierachical_token
+            
 
         # Control whether the LLM parameters are trainable
         for param in self.llm.parameters():
             param.requires_grad = llm_requires_grad
 
-    def get_wsi_embedding(self, patch_embs, patch_masks, coords, level, input_ids_instruct=None, attention_mask_instruct=None):
-
-        # input_ids_instruct, attention_mask_instruct for text interaction
+    def get_wsi_embedding(self, patch_embs, patch_masks, corrds, level):
 
         if self.agg_strategy == 'abmil':
 
@@ -460,23 +434,15 @@ class WPathVLM(PPathVLM):
         elif self.agg_strategy == "longnet":
             patch_size_dict = {0:1024.0, 1:2048.0, 2:4096.0}
             patch_size_dict = {key: torch.tensor([value]) for key, value in patch_size_dict.items()}
-            query = self.query[level].repeat(patch_embs.shape[0], 1, 1)
-            key_padding_mask = patch_masks.bool()
-            instruct_embs = self.embedding_layer(input_ids_instruct)
-            agged_WSI_embs = self.run_inference_with_slide_encoder(query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), 
-                                                                instruct_embs, coords.to(torch.bfloat16),
-                                                                self_attention_mask=attention_mask_instruct,
-                                                                key_padding_mask=~key_padding_mask,
-                                                                slide_encoder_model=self.longnet_encoder_list[level],
-                                                                patch_size=patch_size_dict[level].cuda().to(torch.bfloat16)) # .to(torch.bfloat16)
-
+            agged_WSI_embs = self.run_inference_with_slide_encoder(query=self.query[level].repeat(patch_embs.shape[0], 1, 1), 
+                                                slide_encoder_model=self.longnet_encoder_list[level], 
+                                                tile_embeds=patch_embs,
+                                                coords=corrds,
+                                                patch_size=patch_size_dict[level]) # .to(torch.bfloat16)
         elif self.agg_strategy == "qformer":
-            query = self.query[level].repeat(patch_embs.shape[0], 1, 1)
+            query = self.query[level].repeat(patch_embs.shape[0], 1, 1).cuda()
             key_padding_mask = patch_masks.bool()
-            instruct_embs = self.embedding_layer(input_ids_instruct)
-            agged_WSI_embs = self.qformer_encoder_list[level](query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), instruct_embs,
-                                                              self_attention_mask=attention_mask_instruct, 
-                                                              key_padding_mask=~key_padding_mask)
+            agged_WSI_embs = self.qformer_encoder_list[level](query, patch_embs, query.shape[1], self_attention_mask=None, key_padding_mask=~key_padding_mask)
         
         else: # "sample, kmeans, gmm"
             agged_WSI_embs = patch_embs
@@ -484,8 +450,7 @@ class WPathVLM(PPathVLM):
         return agged_WSI_embs
      
     # used in LongNet+Crossattention
-    def run_inference_with_slide_encoder(self, query, tile_embeds, instruct_embs, coords, slide_encoder_model, patch_size=256,
-                                         self_attention_mask=None, key_padding_mask=None):
+    def run_inference_with_slide_encoder(self, query, tile_embeds: torch.Tensor, coords: torch.Tensor, slide_encoder_model: torch.nn.Module, patch_size) -> torch.Tensor:
         """         
         Run inference with the slide encoder
                 
@@ -504,15 +469,14 @@ class WPathVLM(PPathVLM):
                     
         # slide_encoder_model = slide_encoder_model.cuda()
         # print("1:{}".format(torch.cuda.memory_allocated(0)))
-        # slide_encoder_model = slide_encoder_model.cuda()
+        slide_encoder_model = slide_encoder_model.cuda()
                       
         # print("2:{}".format(torch.cuda.memory_allocated(0)))
         # slide_encoder_model.eval()
          # run inference
         with torch.cuda.amp.autocast(dtype=torch.float16):
             # slide_embeds = slide_encoder_model(tile_embeds.cuda(), coords.cuda(), all_layer_embed=True)
-            slide_embeds = slide_encoder_model(query, tile_embeds, instruct_embs, coords, patch_size,
-                                               self_attention_mask=self_attention_mask, key_padding_mask=key_padding_mask)
+            slide_embeds = slide_encoder_model(query.cuda(), tile_embeds.cuda(), coords.cuda(), patch_size.cuda(), all_layer_embed=False)
         # outputs = {"layer_{}_embed".format(i): slide_embeds[i].cuda() for i in range(len(slide_embeds))}
         # outputs["last_layer_embed"] = slide_embeds[-1].cuda()
         # print("3:{}".format(torch.cuda.memory_allocated(0)))
@@ -521,7 +485,7 @@ class WPathVLM(PPathVLM):
     def get_fusion_embedding(self, input_ids, agged_WSI_embs):
         
         token_embs = self.embedding_layer(input_ids)
-        image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id).to(agged_WSI_embs[0].device))
+        image_token_emb = self.embedding_layer(torch.tensor(self.image_token_id[0]).to(agged_WSI_embs[0].device))
         batch_image_token_emb = image_token_emb.repeat(agged_WSI_embs[0].size(0), 1, 1)
 
         agged_WSI_embs = torch.cat(agged_WSI_embs, dim=1)
@@ -553,6 +517,7 @@ class WPathVLM(PPathVLM):
         fusion_embs =  torch.cat((batch_image_token_emb, mag_WSI_embs, text_token_embs), dim=1)
         return fusion_embs
 
+    
     def generate(self, *args, **kwargs):
         generation_config = GenerationConfig(
                 max_length=200,
@@ -575,15 +540,16 @@ class WPathVLM(PPathVLM):
             for level in range(self.n_level):
                 patch_embs = kwargs["fea{}".format(level)].float() # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
                 patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
-                coords = kwargs["cor{}".format(level)]
-                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, coords, level)
+                corrds = kwargs["cor{}".format(level)]
+                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level)
                 #agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
                 agged_WSI_embs.append(agged_WSI_embs_level.float())
-
+                
             if self.hierachical_token:
                 fusion_embs = self.get_fusion_embedding_hierarchy(input_ids, agged_WSI_embs)
             else:
                 fusion_embs = self.get_fusion_embedding(input_ids, agged_WSI_embs)
+
             text_attention_mask = self.pad_attention_fusion(fusion_embs.size(1), text_attention_mask)
 
             res = self.llm.generate(inputs_embeds=fusion_embs, attention_mask=text_attention_mask, generation_config=generation_config)
@@ -597,8 +563,6 @@ class WPathVLM(PPathVLM):
     def forward(self, *args, **kwargs):
         input_ids = kwargs["input_ids"] # ids for text
         text_attention_mask = kwargs["attention_mask"]
-        input_ids_instruct = kwargs["input_ids_instruct"]
-        attention_mask_instruct = kwargs["attention_mask_instruct"]
         labels = kwargs["labels"]
         agged_WSI_embs = []
         
@@ -606,9 +570,7 @@ class WPathVLM(PPathVLM):
             patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
             patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
             corrds = kwargs["cor{}".format(level)]
-            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level,
-                                                          input_ids_instruct = input_ids_instruct,
-                                                          attention_mask_instruct = attention_mask_instruct)
+            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level)
             # agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
             agged_WSI_embs.append(agged_WSI_embs_level)
         

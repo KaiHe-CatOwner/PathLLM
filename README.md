@@ -1,6 +1,7 @@
 # PathLLM# PathLLM
 
 ## Longnet ##
+```
 
 --vision_adaptor False (vision-query-question interaction)
 
@@ -9,6 +10,8 @@
 --hierachical_adaptor False (same adaptor for all level)
 
 --hierachical_adaptor True (different adaptors for different levels)
+
+```
 
 ### Train Step 1 ###
 ```

@@ -84,6 +84,19 @@ def tokenize(element):
     )
     return {"input_ids": outputs["input_ids"], "attention_mask": outputs["attention_mask"]}
 
+def tokenize_instruct(element):
+    """Tokenize the input text."""
+    outputs = tokenizer(
+        element,
+        add_special_tokens=True,
+        truncation=True,
+        padding=False,
+        max_length=script_args.max_seq_length,
+        return_overflowing_tokens=False,
+        return_length=False
+    )
+    return {"input_ids_instruct": outputs["input_ids"], "attention_mask_instruct": outputs["attention_mask"]}
+
 def evaluate_model(model, eval_dataloader, script_args, mode='open'):
     """
     Evaluate the model on the provided data loader and save results.
@@ -106,6 +119,8 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         # Move inputs to the device
         input_ids = batch['input_ids'].to(device)
         attention_masks = batch['attention_mask'].to(device)
+        input_ids_instruct = batch['input_ids_instruct'].to(device)
+        attention_mask_instruct = batch['attention_mask_instruct'].to(device)
         fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
         cor0, cor1, cor2 = batch['cor0'].to(device), batch['cor1'].to(device), batch['cor2'].to(device)
         mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
@@ -118,6 +133,8 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         res = model.generate(
             input_ids=input_ids,
             attention_mask=attention_masks,
+            input_ids_instruct=input_ids_instruct,
+            attention_mask_instruct=attention_mask_instruct,
             fea0=fea0, fea1=fea1, fea2=fea2,
             mask0=mask0, mask1=mask1, mask2=mask2,
             cor0=cor0, cor1=cor1, cor2=cor2,
@@ -131,10 +148,10 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
 
     # Save results in a dictionary
     results = {
-        "slide_ids": slide_id_list,
-        "questions": qes_list,
-        "answers": ans_list,
-        "results": res_list,
+        "slide_id": slide_id_list,
+        "question": qes_list,
+        "answer": ans_list,
+        "prediction": res_list,
     }
 
     # Evaluate using the specified metrics function
@@ -145,6 +162,10 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
 
     # Save results to a CSV file
     df_results = pd.DataFrame(results)
+    slide_metadata_1 = pd.read_csv("./dataset_csv/gtex_slide_url_info.csv")[['slide_id', 'slide_url']]
+    slide_metadata_2 = pd.read_csv("./dataset_csv/tcga_slide_url_info.csv")[['slide_id', 'slide_url']]
+    slide_metadata = pd.concat([slide_metadata_1, slide_metadata_2], axis=0)
+    df_results = df_results.merge(slide_metadata, on='slide_id', how='left')
 
     filename, ext = os.path.splitext(script_args.results_save_path)
 
@@ -248,8 +269,11 @@ tokenizer.padding_side = 'left'
 tokenizer.truncation_side = 'left'
 
 # Add new tokens
-new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
-# new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
+if script_args.hierachical_token:
+    new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
+else:
+    new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+
 # num_added_toks = tokenizer.add_tokens(new_tokens)
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
@@ -266,6 +290,9 @@ for dataset_name in script_args.dataset_name_list.split(","):
     # columns_to_remove = ['slide_id'] # keep slide id
     columns_to_remove = []
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
+
+    # one_dataset.cleanup_cache_files()
+
     if 'project' in one_dataset.column_names:
         columns_to_remove.append('project')
     elif 'site' in one_dataset.column_names:
@@ -278,7 +305,7 @@ for dataset_name in script_args.dataset_name_list.split(","):
                                         num_proc=20, remove_columns=columns_to_remove)
             open_dataset.append(one_dataset)
         else: # for CloseQA instruction dataset
-            one_dataset = one_dataset.map(wsi_formatting_qa_close_test, fn_kwargs={'tokenizer': tokenizer, 'prompt_tag': True}, 
+            one_dataset = one_dataset.map(wsi_formatting_qa_close_test, fn_kwargs={'tokenizer': tokenizer, 'prompt_tag': False}, 
                                         num_proc=20, remove_columns=columns_to_remove)
             close_dataset.append(one_dataset)
     else:
@@ -362,29 +389,21 @@ data_collator = MyDataCollatorForWPathVLM(tokenizer=tokenizer,
 #     else:
 
 dataloader_params = {"batch_size": script_args.batch_size, "collate_fn": data_collator, "shuffle": script_args.shuffle}
-remove_columns=['text']
+
 if open_dataset!=[]:
-    tokenized_open_dataset = open_dataset.map(
-                        tokenize,
-                        batched=False,
-                        remove_columns=remove_columns,
-                        num_proc=4,
-                        batch_size=script_args.batch_size,
-                        input_columns=['text'],
-                        )
+    tokenized_open_dataset = open_dataset.map(tokenize, batched=False, remove_columns=['text'], num_proc=4,
+                        batch_size=script_args.batch_size,input_columns=['text'])
+    tokenized_open_dataset = tokenized_open_dataset.map(tokenize_instruct, batched=False, remove_columns=['text_input'], num_proc=4,
+                        batch_size=script_args.batch_size,input_columns=['text_input'])
     open_dataloader = DataLoader(tokenized_open_dataset, **dataloader_params)
     print("### Start evaluating open-ended!")
     evaluate_model(model, open_dataloader, script_args, mode='open')
 
 if close_dataset!=[]:
-    tokenized_close_dataset = close_dataset.map(
-                        tokenize,
-                        batched=False,
-                        remove_columns=remove_columns,
-                        num_proc=4,
-                        batch_size=script_args.batch_size,
-                        input_columns=['text'],
-                        )
+    tokenized_close_dataset = close_dataset.map(tokenize, batched=False, remove_columns=['text'], num_proc=4,
+                        batch_size=script_args.batch_size,input_columns=['text'])
+    tokenized_close_dataset = tokenized_close_dataset.map(tokenize_instruct, batched=False, remove_columns=['text_input'], num_proc=4,
+                        batch_size=script_args.batch_size,input_columns=['text_input'])
     close_dataloader = DataLoader(tokenized_close_dataset, **dataloader_params)
     print("### Start evaluating close-ended!")
     evaluate_model(model, close_dataloader, script_args, mode='close')

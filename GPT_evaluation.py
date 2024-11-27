@@ -9,73 +9,75 @@ import openai
 from openai import OpenAI
 import json
 
-# @backoff.on_exception(backoff.expo,(SyntaxError,openai.APIError,openai.error.APIConnectionError,TimeoutError,KeyError,NameError,ValueError),max_time=10)
-# def generate(prompt):
-#     message = [
-#                 # {"role": "system", "content": "You are a senior pathologist."},
-#                 {"role": "user", "content": prompt},
-#         ]
-#     global total_length
-#     total_length+=len(str(message))
-#     return openai.ChatCompletion.create(
-#         temperature=0.2,
-#         model = "gpt-4o-mini",
-#         response_format={"type": "json_object"},
-#         messages=message,
-#         timeout=httpx.Timeout(15.0, read=15.0, write=15.0, connect=20.0)
-#     )
-
-def generate(prompt):
+def generate(prompt, content):
     client = OpenAI(api_key=api_key)
     message = [
-        {"role": "user", "content": prompt},
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": content},
     ]
     global total_length
     total_length += len(str(message))
 
     try:
-        chat_completion = client.chat.completions.create(
+        response = client.chat.completions.create(
             messages=message,
             model="gpt-4o",
             # temperature=0.2
         )
-        return chat_completion
+        return response
     except Exception as e:
         print(f"Error generating completion: {e}")
         return None
 
 def open_question_evaluate(content):
-    quilt_prompt = f"""You will be provided with a question, a ground truth answer, and a model-generated result related to a pathology case. Your task is to evaluate the correctness of the model's predicted answer.
+    prompt = f"""You will be provided with a question, a ground truth answer, and a model-generated result related to a pathology case. Your task is to evaluate the correctness of the model's predicted results.
     Instructions for evaluation:
-    1.	If the model's answer and the ground truth contain similar or equivalent information, the model's response is considered correct, even if the wording or structure differs.
-    2.	If the model's response is broader but includes the correct answer or its key elements, it should still be considered correct.
-    3.	If part of the model's answer matches the key information from the ground truth, the result is partially correct.
-    4.	If there is no conceptual overlap between the model's response and the ground truth, then it should be considered incorrect.
-    5.	For yes/no questions, focus only on the correctness of the yes/no response itself.
+    1.	If the model's result and the ground truth answer contain similar or equivalent information, it is correct, even if the wording or structure differs.
+    2.	If the model's result is broader but includes the ground truth answer or its key elements, it should still be considered correct.
+    3.	If part of the model's result matches part of the key information from the ground truth answer, the result is partially correct.
+    4.	If the model's result contradicts the ground truth answer, it is wrong. 
+    5.  If the model's result and the ground truth answer do not overlap, but the result could be an answer based on the question, it is uncertain.
+    6.	For yes/no questions, focus only on the correctness of the yes/no response itself.
     In the response, provide only a number:
-    -	1 if the model's result is correct,
-    -	2 if it is partially correct,
-    -	0 if it is incorrect.
-    Ensure your assessment reflects the clinical context and evaluates the accuracy of the provided content. Here is the content: {content}
+    -	2 if the model's result is correct,
+    -	1 if it is partially correct,
+    -	-1 if it is incorrect,
+    -   0 if it is uncertain.
+    Ensure your assessment reflects the clinical context and evaluates the accuracy of the provided content.
     """
-    response = generate(quilt_prompt)
-    # print(response)
+    response = generate(prompt, content)
     res = eval(response.choices[0].message.content.strip())
-    # print(res)
     return res
 
 def description_evaluation(content):
-    quilt_prompt = f"""You are a senior pathologist. You will be provided with a question, an answer, and a model-generated description related to a pathology case. In the provided content, the key named answers represents ground truth. Your task is to evaluate the generated description based on the following criteria:
-                    1. **Helpfulness**: How useful is the description in addressing the question?
-                    2. **Relevance**: Does the description relate directly to the question and the pathology case?
-                    3. **Accuracy**: Is the information presented in the description factually correct and aligned with the known pathology?
-                    4. **Level of Detail**: Does the description provide sufficient detail to be informative without being overly verbose?
-                    Please rate the generated description on a scale of 1 to 10 for each criterion, where 1 indicates poor performance and 10 indicates excellent performance. 
-                    The final output should be only a float number range from 1 to 10, which represents the overall score based on your evaluation of all aspects. Consider the clinical context and ensure your assessment is objective and free from bias.
-                    Here is the content: {content}
-                    """
-    response = generate(quilt_prompt)
-    res = eval(response.choices[0].message.content.strip())
+    prompt = f"""Prompt for Evaluating Pathology Slide Description Generation Models
+
+    Role: Senior Pathologist
+
+    Task: You will be provided with an answer (ground truth description of a pathology slide) and a model-generated description. Your role is to evaluate the quality and accuracy of the model-generated description compared to the ground truth.
+    Content:
+    - Answers (Ground Truth): [Ground truth description of the pathology slide]
+    - Results (Model-generated description): [Description generated by the model]
+    Evaluation Criteria: You will evaluate the generated description based on the following aspects:
+    1. Accuracy: How well does the description match the ground truth? Does it accurately reflect the histological features and diagnosis presented in the pathology slide?
+    2. Completeness: Does the description cover all essential aspects and details mentioned in the ground truth?
+    3. Clarity: How clear and understandable is the description? Is the language precise and appropriate for a pathological context?
+    4. Relevance: Are the described features and details directly relevant to the diagnosis indicated in the ground truth?
+    5. Conciseness: Is the description concise yet informative, without unnecessary details or redundancies?
+    Scoring: Provide an overall score between 0-10 for the model-generated description:
+    - 0-3: Poor - Major inaccuracies and multiple important details missing.
+    - 4-6: Fair - Some relevant information is present, but with notable inaccuracies or omissions.
+    - 7-8: Good - Mostly accurate and complete, with minor discrepancies.
+    - 9-10: Excellent - Nearly perfect match with the ground truth, accurately and clearly described.
+    Task Execution:
+    - Rewrite the Description: Based on the ground truth, write your own version of what an ideal description should be.
+    - Relative Scoring: Compare the model-generated description to your rewritten description and score it relatively.
+    - Absolute Scoring: Directly score the model-generated description against the ground truth for an absolute evaluation.
+    In the response, provide only two numbers, as json format, {{"relative": score, "absolute": score}}.
+    """
+    response = generate(prompt, content)
+    res = response.choices[0].message.content.strip()
+    res = json.loads(res)
     return res
 
 
@@ -83,7 +85,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 data_name = "ckpt10500_open.csv"
 
 parser = argparse.ArgumentParser(description="处理数据文件名")
-parser.add_argument('--type', type=str, default='open', help='desc:处理描述；open:处理开放式问题')
+parser.add_argument('--type', type=str, default='open', help='desc:处理描述; open:处理开放式问题')
 parser.add_argument('--filename', type=str, help='数据文件名')
 
 args = parser.parse_args()
@@ -97,32 +99,35 @@ total_length= 0
 
 if args.type=="open":
     open_file["LLM_result"] = None
-    correct,partial,wrong=0,0,0
+    correct, partial, wrong, uncertain=0,0,0,0
     step = 0
     start = 0
     res = ""
     
 
     for i in tqdm(range(start,len(open_file))):
-        content = str(open_file.iloc[i][["questions","answers","results"]].to_dict())
+        content = str(open_file.iloc[i][["questions", "answers","results"]].to_dict())
         try:
             res = open_question_evaluate(content)
-            if int(res)==1:
-                correct+=1
+            if int(res)==2:
+                correct += 1
+                open_file.loc[i, "LLM_result"] = 2
+            elif int(res)==1:
+                partial += 1
                 open_file.loc[i, "LLM_result"]=1
-            elif int(res)==2:
-                partial+=1
-                open_file.loc[i, "LLM_result"]=0
             elif int(res)==0:
-                wrong+=1
+                wrong += 1
                 open_file.loc[i, "LLM_result"]=-1
+            elif int(res)==-1:
+                uncertain += 1
+                open_file.loc[i, "LLM_result"]=0
             else:
                 print(res)
         except Exception as e:
             print("bee:", e)
             continue
 
-    print("correct: ",correct," partial: ",partial," wrong: ",wrong)
+    print("correct: ",correct," partial: ",partial," wrong: ",wrong, "uncertain", uncertain)
 
     print("accuracy:",(correct+partial)/(correct+partial+wrong))
     name_root = ".".join(data_name.split(".")[:-1])
@@ -130,22 +135,27 @@ if args.type=="open":
 
 
 elif args.type=="desc":
-    open_file["LLM_score"] = None
+    open_file["LLM_score_rela"] = None
+    open_file["LLM_score_abs"] = None
     step = 0
     start = 0
-    score_list = []
+    relative_score_list = []
+    absolute_score_list = []
     for i in tqdm(range(start,len(open_file))):
-        content = str(open_file.iloc[i][["questions","answers","results"]].to_dict())
+        content = str(open_file.iloc[i][["answers", "results"]].to_dict())
         try:
             res = description_evaluation(content)
-            open_file.loc[i, "LLM_score"]=res
-            score_list.append(res)
-        except:
-            print("bee:",res)
+            open_file.loc[i, "LLM_score_rela"]=res["relative"]
+            open_file.loc[i, "LLM_score_abs"]=res["absolute"]
+            relative_score_list.append(res["relative"])
+            absolute_score_list.append(res["absolute"])
+        except Exception as e:
+            print("bee:", e)
             continue
-    print("Average score:",sum(score_list)/(10*len(score_list)))
+    print("Average absolute_score:",sum(absolute_score_list)/(10*len(absolute_score_list)))
+    print("Average relative_score:",sum(relative_score_list)/(10*len(relative_score_list)))
     name_root = ".".join(data_name.split(".")[:-1])
-    open_file.to_csv(f"{name_root}_OMINI_open_LLM_score.csv")
+    open_file.to_csv(f"{name_root}_open_LLM_score.csv")
 
 else:
     raise NotImplementedError("Not implemneted!!!")

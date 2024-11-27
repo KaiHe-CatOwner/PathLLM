@@ -484,9 +484,10 @@ class WPathVLM(PPathVLM):
             query = self.query[level].repeat(patch_embs.shape[0], 1, 1)
             key_padding_mask = patch_masks.bool()
             instruct_embs = self.embedding_layer(input_ids_instruct)
-            agged_WSI_embs = self.qformer_encoder_list[adaptor_level](query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), instruct_embs,
-                                                              self_attention_mask=attention_mask_instruct, 
-                                                              key_padding_mask=~key_padding_mask)
+            agged_WSI_embs = self.qformer_encoder_list[adaptor_level](query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), 
+                                                                      instruct_embs.to(torch.bfloat16),
+                                                                      self_attention_mask=attention_mask_instruct, 
+                                                                      key_padding_mask=~key_padding_mask)
         
         else: # "sample, kmeans, gmm"
             agged_WSI_embs = patch_embs
@@ -579,6 +580,8 @@ class WPathVLM(PPathVLM):
         with torch.no_grad():
             input_ids = kwargs["input_ids"]
             text_attention_mask = kwargs["attention_mask"]
+            input_ids_instruct = kwargs["input_ids_instruct"]
+            attention_mask_instruct = kwargs["attention_mask_instruct"]
             # labels = kwargs["labels"]
             agged_WSI_embs = []
             
@@ -586,7 +589,9 @@ class WPathVLM(PPathVLM):
                 patch_embs = kwargs["fea{}".format(level)].float() # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
                 patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
                 coords = kwargs["cor{}".format(level)]
-                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, coords, level)
+                agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, coords, level,
+                                                            input_ids_instruct = input_ids_instruct,
+                                                            attention_mask_instruct = attention_mask_instruct)
                 #agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)
                 agged_WSI_embs.append(agged_WSI_embs_level.float())
 
@@ -615,8 +620,8 @@ class WPathVLM(PPathVLM):
         for level in range(self.n_level):
             patch_embs = kwargs["fea{}".format(level)] # embeddings for patches, fea1 (40x), fea2 (20x), fea3(10x)
             patch_attention_mask = kwargs["mask{}".format(level)] # attention masks for patches, mask1 (40x), mask2 (20x), mask3 (10x) [1, 0]->[value, empty]
-            corrds = kwargs["cor{}".format(level)]
-            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, corrds, level,
+            coords = kwargs["cor{}".format(level)]
+            agged_WSI_embs_level = self.get_wsi_embedding(patch_embs, patch_attention_mask, coords, level,
                                                           input_ids_instruct = input_ids_instruct,
                                                           attention_mask_instruct = attention_mask_instruct)
             # agged_WSI_embs_level = self.resampler_layer(agged_WSI_embs_level) # (bz, n_heads, 512) -> # (bz, n_heads, 4096)

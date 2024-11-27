@@ -18,7 +18,7 @@ from datasets import load_dataset, concatenate_datasets, load_from_disk
 from model.my_model import WPathVLM
 from model.my_model_vision import WPathVLM as WPathVLM_Vision
 from peft import LoraConfig, get_peft_model
-from utils.formatting_funcs import wsi_formatting_des_test, wsi_formatting_qa_open_test, wsi_formatting_qa_close_test
+from utils.formatting_funcs import wsi_formatting_des_test, wsi_formatting_qa_open_test, wsi_formatting_qa_close_test,wsi_formatting_qa_open, wsi_formatting_qa_close
 
 from utils.eval_utils import calculate_prf_score, compute_bleu_scores, split_sentence, compute_cider_scores, compute_spice_scores
 
@@ -84,6 +84,18 @@ def tokenize(element):
     )
     return {"input_ids": outputs["input_ids"], "attention_mask": outputs["attention_mask"]}
 
+def tokenize_instruct(element):
+    outputs = tokenizer(
+        element,
+        add_special_tokens=True,
+        truncation=True,
+        padding=False,
+        max_length=script_args.max_seq_length,
+        return_overflowing_tokens=False,
+        return_length=False
+    )
+    return {"input_ids_instruct": outputs["input_ids"], "attention_mask_instruct": outputs["attention_mask"]}
+
 def evaluate_model(model, eval_dataloader, script_args, mode='open'):
     """
     Evaluate the model on the provided data loader and save results.
@@ -109,7 +121,8 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
         cor0, cor1, cor2 = batch['cor0'].to(device), batch['cor1'].to(device), batch['cor2'].to(device)
         mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
-        
+        input_ids_instruct = batch["input_ids_instruct"].to(device)
+        attention_mask_instruct = batch["attention_mask_instruct"].to(device)
         questions = batch['questions']
         answers = batch['answers']
         slide_ids = batch['slide_ids']
@@ -118,6 +131,8 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         res = model.generate(
             input_ids=input_ids,
             attention_mask=attention_masks,
+            input_ids_instruct = input_ids_instruct,
+            attention_mask_instruct = attention_mask_instruct,
             fea0=fea0, fea1=fea1, fea2=fea2,
             mask0=mask0, mask1=mask1, mask2=mask2,
             cor0=cor0, cor1=cor1, cor2=cor2,
@@ -248,8 +263,8 @@ tokenizer.padding_side = 'left'
 tokenizer.truncation_side = 'left'
 
 # Add new tokens
-new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
-# new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
+#new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
+new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
 # num_added_toks = tokenizer.add_tokens(new_tokens)
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
@@ -274,6 +289,7 @@ for dataset_name in script_args.dataset_name_list.split(","):
     if 'QA' in dataset_name:  # for QA instruction dataset
         # columns_to_remove += ['question']
         if 'Open' in dataset_name: # for OpenQA instruction dataset
+            print("********MAPPED********")
             one_dataset = one_dataset.map(wsi_formatting_qa_open_test, fn_kwargs={'tokenizer': tokenizer},
                                         num_proc=20, remove_columns=columns_to_remove)
             open_dataset.append(one_dataset)
@@ -286,7 +302,6 @@ for dataset_name in script_args.dataset_name_list.split(","):
         one_dataset = one_dataset.map(wsi_formatting_des_test, fn_kwargs={'tokenizer': tokenizer}, 
                                     num_proc=20, remove_columns=columns_to_remove)
         open_dataset.append(one_dataset)
-
 if open_dataset!=[]:
     open_dataset = concatenate_datasets(open_dataset)
 
@@ -296,6 +311,9 @@ if close_dataset!=[]:
 # Load model
 print(open_dataset)
 print(close_dataset)
+print()
+print()
+print(open_dataset.column_names)
 
 if script_args.vision_adaptor:
     model = WPathVLM_Vision(script_args.llm_requires_grad, 
@@ -372,6 +390,18 @@ if open_dataset!=[]:
                         batch_size=script_args.batch_size,
                         input_columns=['text'],
                         )
+    ########## image text interaction ##########
+    if 'text_input' in open_dataset.column_names:
+        print('tokenize instruction text!')
+        tokenized_open_dataset = tokenized_open_dataset.map(
+            tokenize_instruct,
+            batched=False,
+            remove_columns=['text_input'],
+            num_proc=4,
+            batch_size=script_args.batch_size,
+            input_columns=['text_input'],
+        )
+    print(tokenized_open_dataset.column_names)
     open_dataloader = DataLoader(tokenized_open_dataset, **dataloader_params)
     print("### Start evaluating open-ended!")
     evaluate_model(model, open_dataloader, script_args, mode='open')
@@ -385,6 +415,17 @@ if close_dataset!=[]:
                         batch_size=script_args.batch_size,
                         input_columns=['text'],
                         )
+        ########## image text interaction ##########
+    if 'text_input' in open_dataset.column_names:
+        print('tokenize instruction text!')
+        tokenized_close_dataset = tokenized_close_dataset.map(
+            tokenize_instruct,
+            batched=False,
+            remove_columns=['text_input'],
+            num_proc=4,
+            batch_size=script_args.batch_size,
+            input_columns=['text_input'],
+        )
     close_dataloader = DataLoader(tokenized_close_dataset, **dataloader_params)
     print("### Start evaluating close-ended!")
     evaluate_model(model, close_dataloader, script_args, mode='close')

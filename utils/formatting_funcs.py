@@ -97,6 +97,7 @@ def wsi_formatting_qa_open_test(examples, tokenizer):
     answer = examples["answer"]
     text = f"<|Question|>{question}" + f"<|Answer|>"
     examples["text"] = text
+    examples["text_input"] = question
     return examples
 
 def wsi_formatting_qa_close_test(examples, tokenizer, prompt_tag=True):
@@ -113,4 +114,5 @@ def wsi_formatting_qa_close_test(examples, tokenizer, prompt_tag=True):
         text = f"<|Question|>{question}" + f"<|Answer|>"
 
     examples["text"] = text
+    examples["text_input"] = question
     return examples

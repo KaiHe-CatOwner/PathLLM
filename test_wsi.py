@@ -18,7 +18,7 @@ from datasets import load_dataset, concatenate_datasets, load_from_disk
 from model.my_model import WPathVLM
 from model.my_model_vision import WPathVLM as WPathVLM_Vision
 from peft import LoraConfig, get_peft_model
-from utils.formatting_funcs import wsi_formatting_des_test, wsi_formatting_qa_open_test, wsi_formatting_qa_close_test
+from utils.formatting_funcs import wsi_formatting_des_test, wsi_formatting_qa_open_test, wsi_formatting_qa_close_test,wsi_formatting_qa_open, wsi_formatting_qa_close
 
 from utils.eval_utils import calculate_prf_score, compute_bleu_scores, split_sentence, compute_cider_scores, compute_spice_scores
 
@@ -124,7 +124,8 @@ def evaluate_model(model, eval_dataloader, script_args, mode='open'):
         fea0, fea1, fea2 = batch['fea0'].to(device), batch['fea1'].to(device), batch['fea2'].to(device)
         cor0, cor1, cor2 = batch['cor0'].to(device), batch['cor1'].to(device), batch['cor2'].to(device)
         mask0, mask1, mask2 = batch['mask0'].to(device), batch['mask1'].to(device), batch['mask2'].to(device)
-        
+        input_ids_instruct = batch["input_ids_instruct"].to(device)
+        attention_mask_instruct = batch["attention_mask_instruct"].to(device)
         questions = batch['questions']
         answers = batch['answers']
         slide_ids = batch['slide_ids']
@@ -273,7 +274,6 @@ if script_args.hierachical_token:
     new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
 else:
     new_tokens = ['<|Question|>', '<|Prompt|>', '<|Answer|>', '<|Image|>']
-
 # num_added_toks = tokenizer.add_tokens(new_tokens)
 num_added_toks = tokenizer.add_special_tokens({"additional_special_tokens": new_tokens})
 new_tokens_ids = tokenizer.convert_tokens_to_ids(new_tokens)
@@ -301,6 +301,7 @@ for dataset_name in script_args.dataset_name_list.split(","):
     if 'QA' in dataset_name:  # for QA instruction dataset
         # columns_to_remove += ['question']
         if 'Open' in dataset_name: # for OpenQA instruction dataset
+            print("********MAPPED********")
             one_dataset = one_dataset.map(wsi_formatting_qa_open_test, fn_kwargs={'tokenizer': tokenizer},
                                         num_proc=20, remove_columns=columns_to_remove)
             open_dataset.append(one_dataset)
@@ -313,7 +314,6 @@ for dataset_name in script_args.dataset_name_list.split(","):
         one_dataset = one_dataset.map(wsi_formatting_des_test, fn_kwargs={'tokenizer': tokenizer}, 
                                     num_proc=20, remove_columns=columns_to_remove)
         open_dataset.append(one_dataset)
-
 if open_dataset!=[]:
     open_dataset = concatenate_datasets(open_dataset)
 
@@ -323,6 +323,9 @@ if close_dataset!=[]:
 # Load model
 print(open_dataset)
 print(close_dataset)
+print()
+print()
+print(open_dataset.column_names)
 
 if script_args.vision_adaptor:
     model = WPathVLM_Vision(script_args.llm_requires_grad, 
@@ -404,6 +407,7 @@ if close_dataset!=[]:
                         batch_size=script_args.batch_size,input_columns=['text'])
     tokenized_close_dataset = tokenized_close_dataset.map(tokenize_instruct, batched=False, remove_columns=['text_input'], num_proc=4,
                         batch_size=script_args.batch_size,input_columns=['text_input'])
+
     close_dataloader = DataLoader(tokenized_close_dataset, **dataloader_params)
     print("### Start evaluating close-ended!")
     evaluate_model(model, close_dataloader, script_args, mode='close')

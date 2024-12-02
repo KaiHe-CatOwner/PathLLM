@@ -71,3 +71,9 @@ python test_wsi.py --max_seq_length 128 --batch_size 2 --select_data_num -1 --ev
                     --ckpt_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_abmil_QA_Stage2_hmltoken/ckpt20000.bin\
                     --results_save_path /bask/homes/a/asiw9691/PathVLM/source/PathLLM/output/WSI_ConchLlama3.1_abmil_QA_Stage2_hmltoken/ckpt20000.csv
 ```
+
+### GPT_EVAL ###
+
+```
+python GPT_evaluation.py --type open --filename output/WSI_ConchLlama3.1_abmil_QA_Stage12_newtoken/ckpt9500_open.csv
+```

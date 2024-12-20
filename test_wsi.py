@@ -24,6 +24,29 @@ from utils.eval_utils import calculate_prf_score, compute_bleu_scores, split_sen
 
 device = 'cuda'
 
+def print_parameters_by_depth(model, depth=3, current_depth=1, prefix=''):
+    """
+    打印模型到指定层级的参数信息
+    :param model: 模型对象
+    :param depth: 关注的最大层级
+    :param current_depth: 当前递归深度
+    :param prefix: 用于标识模块路径
+    """
+    total_params = 0
+    for name, module in model.named_children():
+        module_name = f"{prefix}.{name}" if prefix else name
+        if current_depth < depth:
+            print(f"{'  ' * (current_depth - 1)}{module_name}:")
+            total_params += print_parameters_by_depth(
+                module, depth, current_depth + 1, module_name
+            )
+        else:
+            # 统计当前模块的所有参数
+            params = sum(p.numel() for p in module.parameters())
+            print(f"{'  ' * current_depth}- {module_name}: {params:,} params")
+            total_params += params
+    return total_params
+
 @dataclass
 class ScriptArguments:
     """
@@ -224,7 +247,7 @@ def metrics_close_ended(close_candidate, close_reference, script_args):
     correct_predictions = 0
     total_predictions = len(close_candidate)
 
-    for answer, result in zip(close_candidate, close_reference):
+    for result, answer in zip(close_candidate, close_reference):
         answer = answer.strip().lower()
         result = str(result).strip().lower()
         
@@ -306,7 +329,7 @@ for dataset_name in script_args.dataset_name_list.split(","):
                                         num_proc=20, remove_columns=columns_to_remove)
             open_dataset.append(one_dataset)
         else: # for CloseQA instruction dataset
-            one_dataset = one_dataset.map(wsi_formatting_qa_close_test, fn_kwargs={'tokenizer': tokenizer, 'prompt_tag': False}, 
+            one_dataset = one_dataset.map(wsi_formatting_qa_close_test, fn_kwargs={'tokenizer': tokenizer, 'prompt_tag': True}, 
                                         num_proc=20, remove_columns=columns_to_remove)
             close_dataset.append(one_dataset)
     else:
@@ -323,8 +346,6 @@ if close_dataset!=[]:
 # Load model
 print(open_dataset)
 print(close_dataset)
-print()
-print()
 print(open_dataset.column_names)
 
 if script_args.vision_adaptor:
@@ -362,6 +383,8 @@ else:
                     data_cache_dir = script_args.data_cache_dir,
                     )
 
+print_parameters_by_depth(model, depth=3)
+
 if script_args.use_peft:
     peft_config = LoraConfig(
         r=script_args.peft_lora_r,  # Use a moderate rank
@@ -374,7 +397,8 @@ if script_args.use_peft:
 else:
     peft_config = None
 
-model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device))
+if script_args.ckpt_path is not None:
+    model.load_state_dict(torch.load(script_args.ckpt_path, map_location=device))
 # model = model.to(torch.bfloat16)
 model.to(device)
 

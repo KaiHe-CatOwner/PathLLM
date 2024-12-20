@@ -81,83 +81,106 @@ def description_evaluation(content):
     return res
 
 
-api_key = os.getenv("OPENAI_API_KEY")
-data_name = "ckpt10500_open.csv"
+import os
+import argparse
+import pandas as pd
+from tqdm import tqdm
 
+# 获取 API Key
+api_key = os.getenv("OPENAI_API_KEY")
+
+# 配置命令行参数
 parser = argparse.ArgumentParser(description="处理数据文件名")
-parser.add_argument('--type', type=str, default='open', help='desc:处理描述; open:处理开放式问题')
-parser.add_argument('--filename', type=str, help='数据文件名')
+parser.add_argument('--type', type=str, default='open', help='类型：open 处理开放式问题，desc 处理描述性问题')
+parser.add_argument('--filename', type=str, required=True, help='数据文件名')
+parser.add_argument('--suffix', type=str, required=True, help='数据文件名')
 
 args = parser.parse_args()
+data_name = args.filename
 
+# 读取数据文件
+try:
+    open_file = pd.read_csv(data_name)
+except Exception as e:
+    raise FileNotFoundError(f"无法读取文件 {data_name}，请检查路径和文件格式。错误信息: {e}")
 
-if args.filename:
-    data_name = args.filename
-print(data_name)
-open_file = pd.read_csv(data_name)
-total_length= 0
-
-if args.type=="open":
+# 初始化变量
+if args.type == "open":
     open_file["LLM_result"] = None
-    correct, partial, wrong, uncertain=0,0,0,0
-    step = 0
-    start = 0
-    res = ""
-    
+    correct, partial, wrong, uncertain = 0, 0, 0, 0
 
-    for i in tqdm(range(start,len(open_file))):
-        content = str(open_file.iloc[i][["questions", "answers","results"]].to_dict())
+    print("开始处理开放式问题...")
+    for i in tqdm(range(len(open_file))):
+        content = str(open_file.iloc[i][["question", "answer", "prediction"]].to_dict())
         try:
             res = open_question_evaluate(content)
-            if int(res)==2:
+            res = int(res)  # 确保结果是整数
+
+            if res == 2:
                 correct += 1
                 open_file.loc[i, "LLM_result"] = 2
-            elif int(res)==1:
+            elif res == 1:
                 partial += 1
-                open_file.loc[i, "LLM_result"]=1
-            elif int(res)==0:
+                open_file.loc[i, "LLM_result"] = 1
+            elif res == 0:
                 wrong += 1
-                open_file.loc[i, "LLM_result"]=-1
-            elif int(res)==-1:
+                open_file.loc[i, "LLM_result"] = -1
+            elif res == -1:
                 uncertain += 1
-                open_file.loc[i, "LLM_result"]=0
+                open_file.loc[i, "LLM_result"] = 0
             else:
-                print(res)
+                print(f"未知结果: {res}")
         except Exception as e:
-            print("bee:", e)
+            print(f"处理第 {i} 行时出错: {e}")
             continue
 
-    print("correct: ",correct," partial: ",partial," wrong: ",wrong, "uncertain", uncertain)
+    # 输出结果统计
+    print(f"Correct: {correct}, Partial: {partial}, Wrong: {wrong}, Uncertain: {uncertain}")
+    accuracy = (correct + partial) / (correct + partial + wrong) if (correct + partial + wrong) > 0 else 0
+    print(f"Accuracy: {accuracy:.2f}")
 
-    print("accuracy:",(correct+partial)/(correct+partial+wrong))
+    # 保存结果
     name_root = ".".join(data_name.split(".")[:-1])
-    open_file.to_csv(f"{name_root}_open_test_accuracy.csv")
+    output_file = f"{name_root}_open_test_accuracy.csv"
+    open_file.to_csv(output_file, index=False)
+    print(f"处理结果已保存到: {output_file}")
 
-
-elif args.type=="desc":
+elif args.type == "desc":
     open_file["LLM_score_rela"] = None
     open_file["LLM_score_abs"] = None
-    step = 0
-    start = 0
     relative_score_list = []
     absolute_score_list = []
-    for i in tqdm(range(start,len(open_file))):
+
+    print("开始处理描述性问题...")
+    for i in tqdm(range(len(open_file))):
         content = str(open_file.iloc[i][["answers", "results"]].to_dict())
         try:
             res = description_evaluation(content)
-            open_file.loc[i, "LLM_score_rela"]=res["relative"]
-            open_file.loc[i, "LLM_score_abs"]=res["absolute"]
+            open_file.loc[i, "LLM_score_rela"] = res["relative"]
+            open_file.loc[i, "LLM_score_abs"] = res["absolute"]
+
             relative_score_list.append(res["relative"])
             absolute_score_list.append(res["absolute"])
         except Exception as e:
-            print("bee:", e)
+            print(f"处理第 {i} 行时出错: {e}")
             continue
-    print("Average absolute_score:",sum(absolute_score_list)/(10*len(absolute_score_list)))
-    print("Average relative_score:",sum(relative_score_list)/(10*len(relative_score_list)))
+
+    # 计算平均分
+    if relative_score_list and absolute_score_list:
+        avg_relative = sum(relative_score_list) / len(relative_score_list)
+        avg_absolute = sum(absolute_score_list) / len(absolute_score_list)
+        print(f"Average Relative Score: {avg_relative:.2f}")
+        print(f"Average Absolute Score: {avg_absolute:.2f}")
+    else:
+        print("未能计算平均分，可能没有有效结果。")
+
+    # 保存结果
     name_root = ".".join(data_name.split(".")[:-1])
-    open_file.to_csv(f"{name_root}_open_LLM_score.csv")
+    output_file = f"{name_root}{args.suffix}.csv"
+    open_file.to_csv(output_file, index=False)
+    print(f"处理结果已保存到: {output_file}")
 
 else:
-    raise NotImplementedError("Not implemneted!!!")
+    raise NotImplementedError(f"处理类型 '{args.type}' 未实现！")
 
-print("total cost:",total_length/1e6 * 0.15 *7.1)
+# print("total cost:",total_length/1e6 * 0.15 *7.1)

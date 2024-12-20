@@ -1,4 +1,5 @@
 import os
+import copy
 from dataclasses import dataclass, field
 from typing import Dict, List
 import torch
@@ -308,6 +309,9 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
         self.question_token_id = self.tokenizer.convert_tokens_to_ids('<|Question|>')
         self.answer_token_id = self.tokenizer.convert_tokens_to_ids('<|Answer|>')
         self.pad_token_id = self.tokenizer.pad_token_id
+        self.tokenizer_instruct = copy.deepcopy(self.tokenizer)
+        self.tokenizer_instruct.padding_side = 'right'
+        self.tokenizer_instruct.truncation_side = 'right'
 
     def __get_nic__(self, features, coords, size): 
         # NIC not use at this moment
@@ -477,9 +481,9 @@ class MyDataCollatorForWPathVLM(DataCollatorMixin):
                 instruct["attention_mask"] = d["attention_mask_instruct"]
                 instructs.append(instruct)
                 del d["input_ids_instruct"],d["attention_mask_instruct"]
-        
+            
             instruct_batch = pad_without_fast_tokenizer_warning(
-                self.tokenizer, instructs, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
+                self.tokenizer_instruct, instructs, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
             )
 
         if isinstance(examples[0], Mapping):

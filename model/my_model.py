@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import open_clip
+# import gigapath.slide_encoder_old as slide_encoder
 import gigapath.slide_encoder as slide_encoder
 # from gigapath.pipeline import run_inference_with_slide_encoder
 from torchvision import transforms
@@ -12,6 +13,15 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig, GenerationCon
 from transformers import BertModel, BertConfig
 from accelerate import Accelerator
 from utils.utils import clip_path_map
+
+class LowRankLinear(nn.Module):
+    def __init__(self, in_features, out_features, rank):
+        super().__init__()
+        self.proj1 = nn.Linear(in_features, rank, bias=False)  # 从 in_features 降到 rank
+        self.proj2 = nn.Linear(rank, out_features, bias=True)  # 从 rank 映射到 out_features
+
+    def forward(self, x):
+        return self.proj2(self.proj1(x))
 
 class Attn_Net_Gated(nn.Module):
     def __init__(self, L = 1024, D = 256, dropout = False, heads = 1):
@@ -39,7 +49,7 @@ class Attn_Net_Gated(nn.Module):
         A[mask==0] = 1e-9
         return A
     
-class AttentionLayer(nn.Module):
+class XAttentionModel(nn.Module):
     def __init__(self, llm_dim, embed_dim, num_layers=2, num_heads=16):
         super(AttentionLayer, self).__init__()
 
@@ -402,6 +412,7 @@ class WPathVLM(PPathVLM):
         self.image_token_id = image_token_id # ['<|Image|>', '<|High|>', '<|`Mid`|>', '<|Low|>']
         self.hierachical_token = hierachical_token
         self.hierachical_adaptor = hierachical_adaptor
+        self.patch_size_dict = {0:1024.0, 1:2048.0, 2:4096.0}
 
         if self.hierachical_adaptor:
             self.adaptor_level = n_level
@@ -418,15 +429,19 @@ class WPathVLM(PPathVLM):
 
         # LongNet + CrossAttention
         if self.agg_strategy == "longnet":
+            self.reduce = nn.Sequential(
+                LowRankLinear(self.llm.config.hidden_size, self.embed_dim, rank=128),  # rank=128
+                nn.ReLU(),
+                )
             self.query = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)]
             self.longnet_encoder_list = nn.ModuleList([
-                slide_encoder.create_model(pretrained="", model_arch="gigapath_slide_enc2l512d", in_chans=self.llm.config.hidden_size)
-                for _ in range(self.adaptor_level)]).to(torch.bfloat16)
+                slide_encoder.create_model(pretrained="", model_arch="gigapath_slide_enc2l512d", tile_size=self.patch_size_dict[level])
+                for level in range(self.adaptor_level)]).to(torch.bfloat16)
 
         # CrossAttention
         if self.agg_strategy == "qformer":
             self.query = [nn.Parameter(torch.zeros(1, self.n_heads[i], embed_dim)) for i in range(self.n_level)]
-            self.qformer_encoder_list = nn.ModuleList([AttentionLayer(self.llm.config.hidden_size, embed_dim) for _ in range(self.adaptor_level)]).to(torch.bfloat16)
+            self.qformer_encoder_list = nn.ModuleList([XAttentionModel(self.llm.config.hidden_size, embed_dim) for _ in range(self.adaptor_level)]).to(torch.bfloat16)
 
         if self.agg_strategy in ["qformer", "longnet"]:
             for tensor in self.query:
@@ -443,6 +458,18 @@ class WPathVLM(PPathVLM):
         for param in self.llm.parameters():
             param.requires_grad = llm_requires_grad
 
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            # we use xavier_uniform following official JAX ViT:
+            torch.nn.init.xavier_uniform_(m.weight)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+    
     def get_wsi_embedding(self, patch_embs, patch_masks, coords, level, input_ids_instruct=None, attention_mask_instruct=None):
 
         if self.hierachical_adaptor:
@@ -468,11 +495,11 @@ class WPathVLM(PPathVLM):
             agged_WSI_embs = torch.sum(agged_WSI_embs, dim=1) # (bz, n_heads, 512)
 
         elif self.agg_strategy == "longnet":
-            patch_size_dict = {0:1024.0, 1:2048.0, 2:4096.0}
-            patch_size_dict = {key: torch.tensor([value]) for key, value in patch_size_dict.items()}
+            patch_size_dict = {key: torch.tensor([value]) for key, value in self.patch_size_dict.items()}
             query = self.query[level].repeat(patch_embs.shape[0], 1, 1)
             key_padding_mask = patch_masks.bool()
             instruct_embs = self.embedding_layer(input_ids_instruct)
+            instruct_embs = self.reduce(instruct_embs)
             agged_WSI_embs = self.run_inference_with_slide_encoder(query.cuda().to(torch.bfloat16), patch_embs.to(torch.bfloat16), 
                                                                 instruct_embs, coords.to(torch.bfloat16),
                                                                 self_attention_mask=attention_mask_instruct,

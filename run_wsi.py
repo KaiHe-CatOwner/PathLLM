@@ -119,8 +119,10 @@ for dataset_name in script_args.dataset_name_list.split(","):
     one_dataset = load_dataset(dataset_name, split=split_text, cache_dir=script_args.data_cache_dir)
     if 'project' in one_dataset.column_names:
         columns_to_remove.append('project')
-    elif 'site' in one_dataset.column_names:
+    if 'site' in one_dataset.column_names:
         columns_to_remove.append('site')
+    if 'test' in one_dataset.column_names:
+        columns_to_remove.append('test')
 
     if 'QA' in dataset_name:  # for QA instruction dataset
         columns_to_remove += ['question', 'answer']
@@ -128,7 +130,7 @@ for dataset_name in script_args.dataset_name_list.split(","):
             one_dataset = one_dataset.map(wsi_formatting_qa_open, fn_kwargs={'tokenizer': tokenizer},
                                         num_proc=20, remove_columns=columns_to_remove)
         else: # for CloseQA instruction dataset
-            one_dataset = one_dataset.map(wsi_formatting_qa_close, fn_kwargs={'tokenizer': tokenizer},
+            one_dataset = one_dataset.map(wsi_formatting_qa_close, fn_kwargs={'tokenizer': tokenizer, 'prompt_tag': True},
                                         num_proc=20, remove_columns=columns_to_remove)
     else:
         columns_to_remove += ['description']

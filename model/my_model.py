@@ -51,7 +51,7 @@ class Attn_Net_Gated(nn.Module):
     
 class XAttentionModel(nn.Module):
     def __init__(self, llm_dim, embed_dim, num_layers=2, num_heads=16):
-        super(AttentionLayer, self).__init__()
+        super(XAttentionModel, self).__init__()
 
         print("#####Vision-Text Interation Qformer######")
 
@@ -461,12 +461,17 @@ class WPathVLM(PPathVLM):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
+        # Skip initialization for modules belonging to self.llm
+        if hasattr(self, 'llm') and any(m is submodule for submodule in self.llm.modules()):
+            return  # Skip initializing LLM modules
+        
         if isinstance(m, nn.Linear):
-            # we use xavier_uniform following official JAX ViT:
+            # Initialize Linear layers
             torch.nn.init.xavier_uniform_(m.weight)
-            if isinstance(m, nn.Linear) and m.bias is not None:
+            if m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
+            # Initialize LayerNorm layers
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
     
